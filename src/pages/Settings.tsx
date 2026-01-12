@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,19 +6,27 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-import { User, Globe, Palette } from "lucide-react";
+import { useProfile } from "@/hooks/useProfile";
+import { User, Globe } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Settings() {
   const { user } = useAuth();
-  const { toast } = useToast();
+  const { profile, updateProfile, isLoading } = useProfile();
   const [displayName, setDisplayName] = useState("");
   const [currency, setCurrency] = useState("ILS");
 
-  const handleSaveProfile = () => {
-    toast({
-      title: "נשמר",
-      description: "הפרופיל עודכן בהצלחה",
+  useEffect(() => {
+    if (profile) {
+      setDisplayName(profile.display_name || "");
+      setCurrency(profile.preferred_currency || "ILS");
+    }
+  }, [profile]);
+
+  const handleSaveProfile = async () => {
+    await updateProfile.mutateAsync({
+      display_name: displayName,
+      preferred_currency: currency,
     });
   };
 
@@ -42,27 +50,39 @@ export default function Settings() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">אימייל</Label>
-              <Input 
-                id="email" 
-                value={user?.email || ""} 
-                disabled 
-                dir="ltr"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="displayName">שם תצוגה</Label>
-              <Input 
-                id="displayName" 
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="השם שלך"
-              />
-            </div>
-            <Button onClick={handleSaveProfile}>
-              שמור שינויים
-            </Button>
+            {isLoading ? (
+              <>
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="email">אימייל</Label>
+                  <Input 
+                    id="email" 
+                    value={user?.email || ""} 
+                    disabled 
+                    dir="ltr"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="displayName">שם תצוגה</Label>
+                  <Input 
+                    id="displayName" 
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="השם שלך"
+                  />
+                </div>
+                <Button 
+                  onClick={handleSaveProfile}
+                  disabled={updateProfile.isPending}
+                >
+                  {updateProfile.isPending ? "שומר..." : "שמור שינויים"}
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -91,19 +111,6 @@ export default function Settings() {
                 </SelectContent>
               </Select>
             </div>
-          </CardContent>
-        </Card>
-
-        {/* Danger Zone */}
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <CardTitle className="text-destructive">אזור סכנה</CardTitle>
-            <CardDescription>פעולות בלתי הפיכות</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="destructive">
-              מחק את כל הנתונים
-            </Button>
           </CardContent>
         </Card>
       </div>
