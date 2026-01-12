@@ -8,16 +8,8 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, Target, Home, GraduationCap, Plane, Briefcase, Trash2 } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
-
-interface InvestmentGoal {
-  id: string;
-  name: string;
-  targetAmount: number;
-  currentAmount: number;
-  targetDate: string;
-  category: string;
-}
+import { useGoals } from "@/hooks/useGoals";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const categoryIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   retirement: Briefcase,
@@ -37,57 +29,27 @@ const categoryLabels: Record<string, string> = {
 
 export default function Goals() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [goals, setGoals] = useState<InvestmentGoal[]>([
-    {
-      id: "1",
-      name: "קרן חירום",
-      targetAmount: 50000,
-      currentAmount: 32000,
-      targetDate: "2024-12-31",
-      category: "other",
-    },
-    {
-      id: "2",
-      name: "מקדמה לדירה",
-      targetAmount: 200000,
-      currentAmount: 85000,
-      targetDate: "2026-06-01",
-      category: "house",
-    },
-  ]);
-  const { toast } = useToast();
+  const { goals, createGoal, deleteGoal, totalTarget, totalCurrent, isLoading } = useGoals();
 
-  const handleAddGoal = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddGoal = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     
-    const newGoal: InvestmentGoal = {
-      id: crypto.randomUUID(),
+    await createGoal.mutateAsync({
       name: formData.get("name") as string,
-      targetAmount: parseFloat(formData.get("targetAmount") as string) || 0,
-      currentAmount: parseFloat(formData.get("currentAmount") as string) || 0,
-      targetDate: formData.get("targetDate") as string,
+      target_amount: parseFloat(formData.get("targetAmount") as string) || 0,
+      current_amount: parseFloat(formData.get("currentAmount") as string) || 0,
+      target_date: formData.get("targetDate") as string || null,
       category: formData.get("category") as string,
-    };
+      notes: formData.get("notes") as string || null,
+    });
 
-    setGoals([...goals, newGoal]);
     setIsDialogOpen(false);
-    toast({
-      title: "יעד נוסף",
-      description: `יעד "${newGoal.name}" נוסף בהצלחה`,
-    });
   };
 
-  const deleteGoal = (id: string) => {
-    setGoals(goals.filter(g => g.id !== id));
-    toast({
-      title: "נמחק",
-      description: "היעד הוסר",
-    });
+  const handleDelete = async (id: string) => {
+    await deleteGoal.mutateAsync(id);
   };
-
-  const totalTarget = goals.reduce((sum, g) => sum + g.targetAmount, 0);
-  const totalCurrent = goals.reduce((sum, g) => sum + g.currentAmount, 0);
 
   return (
     <AppLayout>
@@ -164,12 +126,13 @@ export default function Goals() {
                     id="targetDate" 
                     name="targetDate" 
                     type="date" 
-                    required 
                     dir="ltr"
                   />
                 </div>
                 
-                <Button type="submit" className="w-full">הוסף</Button>
+                <Button type="submit" className="w-full" disabled={createGoal.isPending}>
+                  {createGoal.isPending ? "מוסיף..." : "הוסף"}
+                </Button>
               </form>
             </DialogContent>
           </Dialog>
@@ -182,12 +145,18 @@ export default function Goals() {
               <CardTitle className="text-sm font-medium">סה״כ יעדים</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                ₪{totalTarget.toLocaleString()}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                ב-{goals.length} יעדים
-              </p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-24" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">
+                    ₪{totalTarget.toLocaleString()}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    ב-{goals.length} יעדים
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
           
@@ -196,12 +165,18 @@ export default function Goals() {
               <CardTitle className="text-sm font-medium">סכום נוכחי</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-primary">
-                ₪{totalCurrent.toLocaleString()}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {((totalCurrent / totalTarget) * 100).toFixed(1)}% מהיעד
-              </p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-24" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-primary">
+                    ₪{totalCurrent.toLocaleString()}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {totalTarget > 0 ? ((totalCurrent / totalTarget) * 100).toFixed(1) : 0}% מהיעד
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
           
@@ -210,18 +185,29 @@ export default function Goals() {
               <CardTitle className="text-sm font-medium">נותר</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-muted-foreground">
-                ₪{(totalTarget - totalCurrent).toLocaleString()}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                להשגת כל היעדים
-              </p>
+              {isLoading ? (
+                <Skeleton className="h-8 w-24" />
+              ) : (
+                <>
+                  <div className="text-2xl font-bold text-muted-foreground">
+                    ₪{(totalTarget - totalCurrent).toLocaleString()}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    להשגת כל היעדים
+                  </p>
+                </>
+              )}
             </CardContent>
           </Card>
         </div>
 
         {/* Goals Grid */}
-        {goals.length === 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Skeleton className="h-48 w-full" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        ) : goals.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Target className="h-12 w-12 text-muted-foreground mb-4" />
@@ -238,12 +224,14 @@ export default function Goals() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {goals.map((goal) => {
-              const progress = (goal.currentAmount / goal.targetAmount) * 100;
-              const remaining = goal.targetAmount - goal.currentAmount;
-              const Icon = categoryIcons[goal.category] || Target;
-              const daysLeft = Math.ceil(
-                (new Date(goal.targetDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
-              );
+              const progress = goal.target_amount > 0 
+                ? ((goal.current_amount ?? 0) / goal.target_amount) * 100 
+                : 0;
+              const remaining = goal.target_amount - (goal.current_amount ?? 0);
+              const Icon = categoryIcons[goal.category || "other"] || Target;
+              const daysLeft = goal.target_date 
+                ? Math.ceil((new Date(goal.target_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+                : null;
               
               return (
                 <Card key={goal.id}>
@@ -255,13 +243,13 @@ export default function Goals() {
                         </div>
                         <div>
                           <CardTitle className="text-lg">{goal.name}</CardTitle>
-                          <CardDescription>{categoryLabels[goal.category]}</CardDescription>
+                          <CardDescription>{categoryLabels[goal.category || "other"]}</CardDescription>
                         </div>
                       </div>
                       <Button 
                         variant="ghost" 
                         size="icon"
-                        onClick={() => deleteGoal(goal.id)}
+                        onClick={() => handleDelete(goal.id)}
                       >
                         <Trash2 className="h-4 w-4 text-muted-foreground" />
                       </Button>
@@ -270,8 +258,8 @@ export default function Goals() {
                   <CardContent className="space-y-4">
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
-                        <span>₪{goal.currentAmount.toLocaleString()}</span>
-                        <span className="text-muted-foreground">₪{goal.targetAmount.toLocaleString()}</span>
+                        <span>₪{(goal.current_amount ?? 0).toLocaleString()}</span>
+                        <span className="text-muted-foreground">₪{goal.target_amount.toLocaleString()}</span>
                       </div>
                       <Progress value={progress} className="h-3" />
                       <div className="flex justify-between text-xs text-muted-foreground">
@@ -280,17 +268,19 @@ export default function Goals() {
                       </div>
                     </div>
                     
-                    <div className="flex justify-between items-center pt-2 border-t">
-                      <span className="text-sm text-muted-foreground">תאריך יעד</span>
-                      <span className="text-sm font-medium">
-                        {new Date(goal.targetDate).toLocaleDateString('he-IL')}
-                        {daysLeft > 0 && (
-                          <span className="text-muted-foreground mr-2">
-                            ({daysLeft} ימים)
-                          </span>
-                        )}
-                      </span>
-                    </div>
+                    {goal.target_date && (
+                      <div className="flex justify-between items-center pt-2 border-t">
+                        <span className="text-sm text-muted-foreground">תאריך יעד</span>
+                        <span className="text-sm font-medium">
+                          {new Date(goal.target_date).toLocaleDateString('he-IL')}
+                          {daysLeft !== null && daysLeft > 0 && (
+                            <span className="text-muted-foreground mr-2">
+                              ({daysLeft} ימים)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );

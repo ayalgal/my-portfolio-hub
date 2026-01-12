@@ -1,73 +1,12 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowUpRight, ArrowDownRight, RefreshCw, TrendingUp, DollarSign } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, RefreshCw, DollarSign, Clock } from "lucide-react";
+import { useTransactions } from "@/hooks/useTransactions";
+import { Skeleton } from "@/components/ui/skeleton";
 
-interface Transaction {
-  id: string;
-  type: 'buy' | 'sell' | 'dividend' | 'split' | 'reverse_split';
-  holdingName: string;
-  holdingSymbol: string;
-  quantity: number;
-  price: number;
-  totalAmount: number;
-  currency: string;
-  date: string;
-  notes?: string;
-  splitRatio?: string;
-}
-
-const transactions: Transaction[] = [
-  {
-    id: "1",
-    type: "buy",
-    holdingName: "Apple Inc.",
-    holdingSymbol: "AAPL",
-    quantity: 10,
-    price: 175.50,
-    totalAmount: 1755,
-    currency: "USD",
-    date: "2024-01-15",
-  },
-  {
-    id: "2",
-    type: "dividend",
-    holdingName: "בנק הפועלים",
-    holdingSymbol: "POLI",
-    quantity: 500,
-    price: 0.30,
-    totalAmount: 150,
-    currency: "ILS",
-    date: "2024-01-10",
-  },
-  {
-    id: "3",
-    type: "sell",
-    holdingName: "Microsoft",
-    holdingSymbol: "MSFT",
-    quantity: 5,
-    price: 380,
-    totalAmount: 1900,
-    currency: "USD",
-    date: "2024-01-05",
-  },
-  {
-    id: "4",
-    type: "reverse_split",
-    holdingName: "NVIDIA",
-    holdingSymbol: "NVDA",
-    quantity: 40,
-    price: 0,
-    totalAmount: 0,
-    currency: "USD",
-    date: "2024-01-02",
-    splitRatio: "1:10",
-    notes: "ריברס ספליט - 40 מניות הפכו ל-4",
-  },
-];
-
-const getTypeConfig = (type: Transaction['type']) => {
-  const configs = {
+const getTypeConfig = (type: string) => {
+  const configs: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
     buy: {
       label: "קנייה",
       icon: ArrowDownRight,
@@ -99,15 +38,17 @@ const getTypeConfig = (type: Transaction['type']) => {
       bgColor: "bg-orange-500/10",
     },
   };
-  return configs[type];
+  return configs[type] || configs.buy;
 };
 
-const getCurrencySymbol = (currency: string) => {
+const getCurrencySymbol = (currency: string | null) => {
   const symbols: Record<string, string> = { ILS: "₪", USD: "$", EUR: "€" };
-  return symbols[currency] || currency;
+  return symbols[currency || "ILS"] || currency || "₪";
 };
 
 export default function Activity() {
+  const { transactions, isLoading } = useTransactions();
+
   return (
     <AppLayout>
       <div className="space-y-6">
@@ -122,63 +63,84 @@ export default function Activity() {
             <CardDescription>כל העסקאות והפעולות שבוצעו</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {transactions.map((transaction) => {
-                const config = getTypeConfig(transaction.type);
-                const Icon = config.icon;
-                const currencySymbol = getCurrencySymbol(transaction.currency);
-                
-                return (
-                  <div 
-                    key={transaction.id}
-                    className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
-                  >
-                    <div className={`w-10 h-10 rounded-full ${config.bgColor} flex items-center justify-center`}>
-                      <Icon className={`w-5 h-5 ${config.color}`} />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{transaction.holdingSymbol}</span>
-                        <Badge variant="outline" className={config.color}>
-                          {config.label}
-                        </Badge>
+            {isLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            ) : transactions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <Clock className="h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-semibold mb-2">אין פעילות עדיין</h3>
+                <p className="text-muted-foreground text-center">
+                  עסקאות יוצגו כאן לאחר רישום
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {transactions.map((transaction: any) => {
+                  const config = getTypeConfig(transaction.transaction_type);
+                  const Icon = config.icon;
+                  const currencySymbol = getCurrencySymbol(transaction.currency);
+                  const splitRatio = transaction.split_ratio_from && transaction.split_ratio_to 
+                    ? `${transaction.split_ratio_from}:${transaction.split_ratio_to}`
+                    : null;
+                  
+                  return (
+                    <div 
+                      key={transaction.id}
+                      className="flex items-center gap-4 p-4 rounded-lg border bg-card hover:bg-muted/50 transition-colors"
+                    >
+                      <div className={`w-10 h-10 rounded-full ${config.bgColor} flex items-center justify-center`}>
+                        <Icon className={`w-5 h-5 ${config.color}`} />
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {transaction.holdingName}
-                        {transaction.notes && ` • ${transaction.notes}`}
-                      </p>
-                    </div>
-                    
-                    <div className="text-left">
-                      {transaction.type !== 'split' && transaction.type !== 'reverse_split' ? (
-                        <>
-                          <div className={`font-semibold ${
-                            transaction.type === 'sell' ? 'text-red-500' : 
-                            transaction.type === 'buy' ? 'text-green-500' : 
-                            'text-blue-500'
-                          }`}>
-                            {transaction.type === 'sell' ? '+' : transaction.type === 'buy' ? '-' : '+'}
-                            {currencySymbol}{transaction.totalAmount.toLocaleString()}
-                          </div>
-                          <p className="text-xs text-muted-foreground" dir="ltr">
-                            {transaction.quantity} × {currencySymbol}{transaction.price}
-                          </p>
-                        </>
-                      ) : (
-                        <div className="font-medium text-orange-500">
-                          {transaction.splitRatio}
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">
+                            {transaction.holdings?.symbol || "—"}
+                          </span>
+                          <Badge variant="outline" className={config.color}>
+                            {config.label}
+                          </Badge>
                         </div>
-                      )}
+                        <p className="text-sm text-muted-foreground truncate">
+                          {transaction.holdings?.name || "—"}
+                          {transaction.notes && ` • ${transaction.notes}`}
+                        </p>
+                      </div>
+                      
+                      <div className="text-left">
+                        {transaction.transaction_type !== 'split' && transaction.transaction_type !== 'reverse_split' ? (
+                          <>
+                            <div className={`font-semibold ${
+                              transaction.transaction_type === 'sell' ? 'text-red-500' : 
+                              transaction.transaction_type === 'buy' ? 'text-green-500' : 
+                              'text-blue-500'
+                            }`}>
+                              {transaction.transaction_type === 'sell' ? '+' : transaction.transaction_type === 'buy' ? '-' : '+'}
+                              {currencySymbol}{transaction.total_amount?.toLocaleString() || 0}
+                            </div>
+                            <p className="text-xs text-muted-foreground" dir="ltr">
+                              {transaction.quantity} × {currencySymbol}{transaction.price}
+                            </p>
+                          </>
+                        ) : (
+                          <div className="font-medium text-orange-500">
+                            {splitRatio}
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="text-left text-sm text-muted-foreground min-w-[80px]">
+                        {new Date(transaction.transaction_date).toLocaleDateString('he-IL')}
+                      </div>
                     </div>
-                    
-                    <div className="text-left text-sm text-muted-foreground min-w-[80px]">
-                      {new Date(transaction.date).toLocaleDateString('he-IL')}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
