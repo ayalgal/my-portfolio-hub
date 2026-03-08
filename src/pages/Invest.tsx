@@ -312,6 +312,7 @@ export default function Invest() {
               </div>
             </CardHeader>
             <CardContent>
+            {viewMode === "list" ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -324,7 +325,9 @@ export default function Invest() {
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("type")}>
                       <span className="flex items-center gap-1">סוג <SortIcon field="type" /></span>
                     </TableHead>
-                    <TableHead className="text-right">קטגוריות</TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("category")}>
+                      <span className="flex items-center gap-1">קטגוריות <SortIcon field="category" /></span>
+                    </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("quantity")}>
                       <span className="flex items-center gap-1">כמות <SortIcon field="quantity" /></span>
                     </TableHead>
@@ -335,10 +338,13 @@ export default function Invest() {
                       <span className="flex items-center gap-1">מחיר נוכחי <SortIcon field="price" /></span>
                     </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("value")}>
-                      <span className="flex items-center gap-1">שווי כולל <SortIcon field="value" /></span>
+                      <span className="flex items-center gap-1">שווי (₪) <SortIcon field="value" /></span>
                     </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("pnl")}>
-                      <span className="flex items-center gap-1">רווח/הפסד <SortIcon field="pnl" /></span>
+                      <span className="flex items-center gap-1">רווח/הפסד (₪) <SortIcon field="pnl" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("pnlPct")}>
+                      <span className="flex items-center gap-1">% <SortIcon field="pnlPct" /></span>
                     </TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
