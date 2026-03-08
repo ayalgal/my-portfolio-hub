@@ -186,26 +186,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleResetData = async () => {
-    if (!user?.id) return;
-    setIsResetting(true);
-    try {
-      // Delete in order: dividends, transactions, holding_categories, holdings, stock_splits
-      await supabase.from('dividends').delete().eq('user_id', user.id);
-      await supabase.from('transactions').delete().eq('user_id', user.id);
-      await supabase.from('holding_categories').delete().eq('user_id', user.id);
-      await supabase.from('stock_splits').delete().eq('user_id', user.id);
-      await supabase.from('holdings').delete().eq('user_id', user.id);
-      
-      toast({ title: "הנתונים נמחקו", description: "כל ההחזקות, העסקאות והדיבידנדים נמחקו" });
-      window.location.reload();
-    } catch (err) {
-      toast({ variant: "destructive", title: "שגיאה", description: "לא ניתן למחוק נתונים" });
-    } finally {
-      setIsResetting(false);
-      setResetConfirmText("");
-    }
-  };
+  // Reset moved to Settings page
 
   return (
     <AppLayout>
