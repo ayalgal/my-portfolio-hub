@@ -28,14 +28,16 @@ export default function Invest() {
     
     const formData = new FormData(e.currentTarget);
     
+    const fundNumber = formData.get("fundNumber") as string;
     createHolding.mutate({
-      symbol: formData.get("symbol") as string,
+      symbol: fundNumber || (formData.get("symbol") as string),
       name: formData.get("name") as string,
-      asset_type: formData.get("assetType") as string || "stock",
+      asset_type: selectedAssetType || "stock",
       quantity: parseFloat(formData.get("quantity") as string) || 0,
       average_cost: parseFloat(formData.get("averageCost") as string) || 0,
       currency: formData.get("currency") as string || "ILS",
       portfolio_id: defaultPortfolioId,
+      fund_number: fundNumber || null,
     }, {
       onSuccess: () => setIsDialogOpen(false),
     });
