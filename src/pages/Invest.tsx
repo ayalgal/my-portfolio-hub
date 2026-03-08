@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, TrendingUp, MoreHorizontal, Trash2, Tag, X, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react";
+import { Plus, TrendingUp, MoreHorizontal, Trash2, Tag, X, ArrowUpDown, ArrowUp, ArrowDown, Search, LayoutGrid, List } from "lucide-react";
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
@@ -16,9 +16,11 @@ import { useHoldings } from "@/hooks/useHoldings";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useAllocations } from "@/hooks/useAllocations";
 import { useHoldingCategories } from "@/hooks/useHoldingCategories";
+import { useExchangeRates } from "@/hooks/useExchangeRates";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type AssetType = 'stock' | 'etf' | 'mutual_fund' | 'israeli_fund' | 'bank_savings';
 
@@ -43,11 +45,13 @@ export default function Invest() {
   const [sortField, setSortField] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [filterText, setFilterText] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "category">("list");
   const { portfolios } = usePortfolio();
   const defaultPortfolioId = portfolios?.[0]?.id;
   const { holdings, isLoading, createHolding, deleteHolding } = useHoldings(defaultPortfolioId);
   const { categories, createCategory } = useAllocations();
   const { holdingCategories, assignCategory, removeCategory, getCategoriesForHolding } = useHoldingCategories();
+  const { convertToILS } = useExchangeRates();
   const { toast } = useToast();
 
   const toggleSort = (field: string) => {
@@ -220,6 +224,21 @@ export default function Invest() {
           const activeHoldings = filtered.filter(h => h.quantity > 0);
           const archivedHoldings = filtered.filter(h => h.quantity <= 0);
 
+          const getValueILS = (h: typeof holdings[0]) => {
+            const cp = h.current_price ?? h.average_cost;
+            return convertToILS(h.quantity * cp, h.currency || "ILS");
+          };
+          const getPnlILS = (h: typeof holdings[0]) => {
+            if (!h.current_price) return 0;
+            const cp = h.current_price;
+            return convertToILS(h.quantity * cp - h.quantity * h.average_cost, h.currency || "ILS");
+          };
+          const getPnlPercent = (h: typeof holdings[0]) => {
+            if (!h.current_price) return 0;
+            const cost = h.quantity * h.average_cost;
+            return cost > 0 ? ((h.quantity * h.current_price - cost) / cost) * 100 : 0;
+          };
+
           const sortedActive = [...activeHoldings].sort((a, b) => {
             const getVal = (h: typeof a) => {
               const cp = h.current_price ?? h.average_cost;
@@ -227,11 +246,16 @@ export default function Invest() {
                 case "symbol": return h.symbol;
                 case "name": return h.name;
                 case "type": return h.asset_type;
+                case "category": {
+                  const cats = getCategoriesForHolding(h.id);
+                  return cats.length > 0 ? (cats[0] as any).allocation_categories?.name || "" : "zzz";
+                }
                 case "quantity": return h.quantity;
                 case "avgCost": return h.average_cost;
                 case "price": return cp;
-                case "value": return h.quantity * cp;
-                case "pnl": return h.current_price ? (h.quantity * cp) - (h.quantity * h.average_cost) : 0;
+                case "value": return getValueILS(h);
+                case "pnl": return getPnlILS(h);
+                case "pnlPct": return getPnlPercent(h);
                 default: return h.name;
               }
             };
@@ -239,6 +263,14 @@ export default function Invest() {
             const cmp = typeof va === "string" ? va.localeCompare(vb as string) : (va as number) - (vb as number);
             return sortDir === "asc" ? cmp : -cmp;
           });
+
+          // Category grouped view
+          const categoryGroups = categories.map(cat => {
+            const catHoldingIds = holdingCategories.filter(hc => hc.category_id === cat.id).map(hc => hc.holding_id);
+            return { ...cat, catHoldings: activeHoldings.filter(h => catHoldingIds.includes(h.id)) };
+          }).filter(g => g.catHoldings.length > 0);
+          const categorizedIds = new Set(holdingCategories.map(hc => hc.holding_id));
+          const uncategorizedHoldings = activeHoldings.filter(h => !categorizedIds.has(h.id));
           
           return isLoading ? (
           <Card><CardContent className="py-8"><Skeleton className="h-40 w-full" /></CardContent></Card>
@@ -257,10 +289,15 @@ export default function Invest() {
           <>
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
                   <CardTitle>ניירות ערך ({activeHoldings.length})</CardTitle>
-                  <CardDescription>רשימת כל ניירות הערך בפורטפוליו</CardDescription>
+                  <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "category")}>
+                    <TabsList className="h-8">
+                      <TabsTrigger value="list" className="h-6 px-2"><List className="h-3 w-3" /></TabsTrigger>
+                      <TabsTrigger value="category" className="h-6 px-2"><LayoutGrid className="h-3 w-3" /></TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                 </div>
                 <div className="relative w-48">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -274,6 +311,7 @@ export default function Invest() {
               </div>
             </CardHeader>
             <CardContent>
+            {viewMode === "list" ? (
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -286,7 +324,9 @@ export default function Invest() {
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("type")}>
                       <span className="flex items-center gap-1">סוג <SortIcon field="type" /></span>
                     </TableHead>
-                    <TableHead className="text-right">קטגוריות</TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("category")}>
+                      <span className="flex items-center gap-1">קטגוריות <SortIcon field="category" /></span>
+                    </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("quantity")}>
                       <span className="flex items-center gap-1">כמות <SortIcon field="quantity" /></span>
                     </TableHead>
@@ -297,10 +337,13 @@ export default function Invest() {
                       <span className="flex items-center gap-1">מחיר נוכחי <SortIcon field="price" /></span>
                     </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("value")}>
-                      <span className="flex items-center gap-1">שווי כולל <SortIcon field="value" /></span>
+                      <span className="flex items-center gap-1">שווי (₪) <SortIcon field="value" /></span>
                     </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("pnl")}>
-                      <span className="flex items-center gap-1">רווח/הפסד <SortIcon field="pnl" /></span>
+                      <span className="flex items-center gap-1">רווח/הפסד (₪) <SortIcon field="pnl" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("pnlPct")}>
+                      <span className="flex items-center gap-1">% <SortIcon field="pnlPct" /></span>
                     </TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
@@ -314,6 +357,8 @@ export default function Invest() {
                     const pnlPercent = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
                     const currencySymbol = getCurrencySymbol(holding.currency || "ILS");
                     const holdingCats = getCategoriesForHolding(holding.id);
+                    const valueILS = getValueILS(holding);
+                    const pnlILS = getPnlILS(holding);
                     
                     return (
                       <TableRow key={holding.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${holding.id}`)}>
@@ -405,11 +450,14 @@ export default function Invest() {
                             : <span className="text-muted-foreground">—</span>
                           }
                         </TableCell>
-                        <TableCell dir="ltr" className="font-semibold">{currencySymbol}{totalValue.toLocaleString()}</TableCell>
-                        <TableCell dir="ltr" className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
+                        <TableCell dir="ltr" className="font-semibold">₪{valueILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                        <TableCell dir="ltr" className={pnlILS >= 0 ? 'text-green-500' : 'text-red-500'}>
                           {holding.current_price ? (
-                            <>{pnl >= 0 ? '+' : ''}{currencySymbol}{pnl.toLocaleString(undefined, {maximumFractionDigits: 0})} ({pnlPercent.toFixed(1)}%)</>
+                            <>{pnlILS >= 0 ? '+' : ''}₪{pnlILS.toLocaleString(undefined, {maximumFractionDigits: 0})}</>
                           ) : '—'}
+                        </TableCell>
+                        <TableCell dir="ltr" className={pnlPercent >= 0 ? 'text-green-500' : 'text-red-500'}>
+                          {holding.current_price ? `${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(1)}%` : '—'}
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
@@ -428,6 +476,68 @@ export default function Invest() {
                   })}
                 </TableBody>
               </Table>
+            ) : (
+              /* Category grouped view */
+              <div className="space-y-4">
+                {categoryGroups.map(group => (
+                  <div key={group.id}>
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color || "#6b7280" }} />
+                      <span className="font-semibold text-sm cursor-pointer hover:underline" onClick={() => navigate(`/category/${group.id}`)}>{group.name}</span>
+                      <span className="text-xs text-muted-foreground">({group.catHoldings.length})</span>
+                    </div>
+                    <Table>
+                      <TableBody>
+                        {group.catHoldings.map(h => {
+                          const cp = h.current_price ?? h.average_cost;
+                          const vILS = getValueILS(h);
+                          const plILS = getPnlILS(h);
+                          return (
+                            <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
+                              <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
+                              <TableCell>{h.name}</TableCell>
+                              <TableCell dir="ltr">{h.quantity.toLocaleString()}</TableCell>
+                              <TableCell dir="ltr">₪{vILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                              <TableCell dir="ltr" className={plILS >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                {h.current_price ? `${plILS >= 0 ? '+' : ''}₪${plILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+                {uncategorizedHoldings.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
+                      <span className="font-semibold text-sm text-muted-foreground">ללא קטגוריה</span>
+                      <span className="text-xs text-muted-foreground">({uncategorizedHoldings.length})</span>
+                    </div>
+                    <Table>
+                      <TableBody>
+                        {uncategorizedHoldings.map(h => {
+                          const vILS = getValueILS(h);
+                          const plILS = getPnlILS(h);
+                          return (
+                            <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
+                              <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
+                              <TableCell>{h.name}</TableCell>
+                              <TableCell dir="ltr">{h.quantity.toLocaleString()}</TableCell>
+                              <TableCell dir="ltr">₪{vILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                              <TableCell dir="ltr" className={plILS >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                {h.current_price ? `${plILS >= 0 ? '+' : ''}₪${plILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            )}
             </CardContent>
           </Card>
 
