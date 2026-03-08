@@ -291,7 +291,7 @@ export default function Import() {
 
     for (const holding of selected) {
       try {
-        await createHolding.mutateAsync({
+        const result = await createHolding.mutateAsync({
           symbol: holding.fundNumber || holding.symbol,
           name: holding.name,
           quantity: holding.totalQuantity,
@@ -302,6 +302,50 @@ export default function Import() {
           fund_number: holding.fundNumber,
           current_price: holding.currentPrice,
         });
+
+        // Create buy transactions for each purchase
+        const isIsraeliFund = holding.assetType === "israeli_fund";
+        for (const buy of holding.buys) {
+          // Skip buys that were sold (they appear in sells too)
+          const wasSold = holding.sells.some(s => s.date && s.quantity === buy.quantity && s.price);
+          if (wasSold) continue;
+          
+          const price = isIsraeliFund ? buy.price / 100 : buy.price;
+          try {
+            await createTransaction.mutateAsync({
+              holding_id: result.id,
+              transaction_type: "buy",
+              quantity: buy.quantity,
+              price: price,
+              total_amount: buy.quantity * price,
+              transaction_date: buy.date ? buy.date.split("T")[0] : new Date().toISOString().split("T")[0],
+              currency: holding.currency,
+              notes: "יובא מ-Donatello",
+            });
+          } catch {
+            // Transaction creation is best-effort
+          }
+        }
+
+        // Create sell transactions
+        for (const sell of holding.sells) {
+          const price = isIsraeliFund ? sell.price / 100 : sell.price;
+          try {
+            await createTransaction.mutateAsync({
+              holding_id: result.id,
+              transaction_type: "sell",
+              quantity: sell.quantity,
+              price: price,
+              total_amount: sell.quantity * price,
+              transaction_date: sell.date ? sell.date.split("T")[0] : new Date().toISOString().split("T")[0],
+              currency: holding.currency,
+              notes: "יובא מ-Donatello",
+            });
+          } catch {
+            // Transaction creation is best-effort
+          }
+        }
+
         success++;
       } catch {
         failed++;
