@@ -20,7 +20,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 
-type AssetType = 'stock' | 'etf' | 'mutual_fund' | 'israeli_fund';
+type AssetType = 'stock' | 'etf' | 'mutual_fund' | 'israeli_fund' | 'bank_savings';
 
 const PRESET_CATEGORIES = [
   { name: "דיבידנד קלאסי", color: "#22c55e" },
