@@ -296,6 +296,16 @@ export default function Import() {
     let success = 0;
     let failed = 0;
 
+    // Pre-fetch existing categories to avoid duplicates
+    const { data: existingCats } = await supabase
+      .from("allocation_categories")
+      .select("*")
+      .eq("user_id", user!.id);
+    const categoryCache: Record<string, string> = {};
+    for (const cat of existingCats || []) {
+      categoryCache[cat.name] = cat.id;
+    }
+
     for (const holding of selected) {
       try {
         const result = await createHolding.mutateAsync({
@@ -356,13 +366,13 @@ export default function Import() {
         // Assign category based on folder name from Donatello
         if (holding.folder && user?.id) {
           try {
-            let cat = categories.find(c => c.name === holding.folder);
-            if (!cat) {
-              cat = await createCategory.mutateAsync({ name: holding.folder });
+            let catId = categoryCache[holding.folder];
+            if (!catId) {
+              const newCat = await createCategory.mutateAsync({ name: holding.folder });
+              catId = newCat.id;
+              categoryCache[holding.folder] = catId;
             }
-            if (cat) {
-              await assignCategory.mutateAsync({ holdingId: result.id, categoryId: cat.id });
-            }
+            await assignCategory.mutateAsync({ holdingId: result.id, categoryId: catId });
           } catch {
             // Category assignment is best-effort
           }
