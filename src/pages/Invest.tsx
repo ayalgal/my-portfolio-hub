@@ -238,7 +238,7 @@ export default function Invest() {
                     const holdingCats = getCategoriesForHolding(holding.id);
                     
                     return (
-                      <TableRow key={holding.id}>
+                      <TableRow key={holding.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${holding.id}`)}>
                         <TableCell className="font-medium" dir="ltr">
                           {holding.fund_number || holding.symbol}
                         </TableCell>
