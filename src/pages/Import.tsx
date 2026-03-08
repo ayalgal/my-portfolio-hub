@@ -324,10 +324,6 @@ export default function Import() {
         // Create buy transactions for each purchase
         const isIsraeliFund = holding.assetType === "israeli_fund";
         for (const buy of holding.buys) {
-          // Skip buys that were sold (they appear in sells too)
-          const wasSold = holding.sells.some(s => s.date && s.quantity === buy.quantity && s.price);
-          if (wasSold) continue;
-          
           const price = isIsraeliFund ? buy.price / 100 : buy.price;
           try {
             await createTransaction.mutateAsync({
