@@ -198,6 +198,9 @@ export default function Import() {
   const { portfolios, createPortfolio } = usePortfolio();
   const { createHolding } = useHoldings();
   const { createTransaction } = useTransactions();
+  const { categories, createCategory } = useAllocations();
+  const { assignCategory } = useHoldingCategories();
+  const { user } = useAuth();
 
   const toggleSelect = (symbol: string) => {
     setAggregated(prev => prev.map(h => h.symbol === symbol ? { ...h, selected: !h.selected } : h));
