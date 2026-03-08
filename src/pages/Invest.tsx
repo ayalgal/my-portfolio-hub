@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, TrendingUp, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { SplitAlerts } from "@/components/SplitAlerts";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useHoldings } from "@/hooks/useHoldings";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -135,8 +136,10 @@ export default function Invest() {
                 </Button>
               </form>
             </DialogContent>
-          </Dialog>
+        </Dialog>
         </div>
+
+        <SplitAlerts />
 
         {isLoading ? (
           <Card><CardContent className="py-8"><Skeleton className="h-40 w-full" /></CardContent></Card>

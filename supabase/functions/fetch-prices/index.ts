@@ -21,9 +21,41 @@ async function fetchYahooPrice(symbol: string): Promise<number | null> {
   }
 }
 
+interface SplitEvent {
+  date: string; // YYYY-MM-DD
+  numerator: number;
+  denominator: number;
+}
+
+async function fetchYahooSplits(symbol: string, fromDate: Date): Promise<SplitEvent[]> {
+  try {
+    const period1 = Math.floor(fromDate.getTime() / 1000);
+    const period2 = Math.floor(Date.now() / 1000);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&events=splits`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const splits = data?.chart?.result?.[0]?.events?.splits;
+    if (!splits) return [];
+
+    return Object.values(splits).map((s: any) => {
+      const d = new Date(s.date * 1000);
+      return {
+        date: d.toISOString().split('T')[0],
+        numerator: s.numerator,
+        denominator: s.denominator,
+      };
+    });
+  } catch {
+    console.error(`Failed to fetch splits for ${symbol}`);
+    return [];
+  }
+}
+
 async function fetchExchangeRates(): Promise<{ USDILS: number; CADILS: number; USDCAD: number } | null> {
   try {
-    // Fetch USD/ILS and CAD/ILS from Yahoo Finance
     const pairs = ['USDILS=X', 'CADILS=X'];
     const rates: Record<string, number> = {};
     
@@ -48,7 +80,6 @@ async function fetchExchangeRates(): Promise<{ USDILS: number; CADILS: number; U
 
 function getYahooSymbol(holding: { symbol: string; asset_type: string; currency: string | null }): string {
   const symbol = holding.symbol;
-  // Israeli stocks on TASE
   if (holding.currency === 'ILS' && holding.asset_type === 'stock') {
     if (!symbol.endsWith('.TA')) return `${symbol}.TA`;
   }
@@ -65,27 +96,24 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    // Fetch all unique holdings
     const { data: holdings, error: holdingsError } = await supabase
       .from('holdings')
-      .select('id, symbol, asset_type, currency')
+      .select('id, symbol, asset_type, currency, user_id, created_at, quantity')
       .gt('quantity', 0);
 
     if (holdingsError) throw holdingsError;
 
     let updated = 0;
     let failed = 0;
+    let splitsDetected = 0;
 
-    // Update prices for each holding
     for (const holding of holdings || []) {
-      // Skip Israeli funds for now (no Yahoo Finance support)
-      if (holding.asset_type === 'israeli_fund') {
-        continue;
-      }
+      if (holding.asset_type === 'israeli_fund') continue;
 
       const yahooSymbol = getYahooSymbol(holding);
+      
+      // Fetch price
       const price = await fetchYahooPrice(yahooSymbol);
-
       if (price !== null) {
         const { error } = await supabase
           .from('holdings')
@@ -94,14 +122,37 @@ Deno.serve(async (req) => {
             last_price_update: new Date().toISOString(),
           })
           .eq('id', holding.id);
-
         if (!error) updated++;
         else failed++;
       } else {
         failed++;
       }
 
-      // Rate limit: wait 200ms between requests
+      // Fetch splits since the holding was created
+      const createdAt = new Date(holding.created_at || '2020-01-01');
+      const splits = await fetchYahooSplits(yahooSymbol, createdAt);
+
+      for (const split of splits) {
+        // Insert as pending if not already exists
+        const { error: splitError } = await supabase
+          .from('stock_splits')
+          .upsert({
+            holding_id: holding.id,
+            user_id: holding.user_id,
+            symbol: holding.symbol,
+            split_date: split.date,
+            ratio_from: split.denominator,
+            ratio_to: split.numerator,
+            status: 'pending',
+          }, {
+            onConflict: 'holding_id,split_date,ratio_from,ratio_to',
+            ignoreDuplicates: true,
+          });
+
+        if (!splitError) splitsDetected++;
+      }
+
+      // Rate limit
       await new Promise(r => setTimeout(r, 200));
     }
 
@@ -125,7 +176,7 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, updated, failed, rates_updated: !!rates }),
+      JSON.stringify({ success: true, updated, failed, splitsDetected, rates_updated: !!rates }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
