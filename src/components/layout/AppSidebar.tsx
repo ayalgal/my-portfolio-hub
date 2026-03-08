@@ -3,7 +3,6 @@ import {
   TrendingUp, 
   PieChart, 
   Wallet, 
-  Target, 
   FileText, 
   Activity,
   Upload,
@@ -34,7 +33,6 @@ const mainNavItems = [
   { title: "ויזואליזציה", url: "/visualize", icon: PieChart },
   { title: "הקצאות", url: "/allocations", icon: Wallet },
   { title: "דיבידנדים", url: "/dividends", icon: Activity },
-  { title: "יעדים", url: "/goals", icon: Target },
   { title: "פעילות", url: "/activity", icon: FileText },
 ];
 

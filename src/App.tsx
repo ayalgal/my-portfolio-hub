@@ -12,7 +12,7 @@ import Visualize from "./pages/Visualize";
 import Allocations from "./pages/Allocations";
 import CategoryDetail from "./pages/CategoryDetail";
 import Dividends from "./pages/Dividends";
-import Goals from "./pages/Goals";
+
 import Activity from "./pages/Activity";
 import Import from "./pages/Import";
 import Export from "./pages/Export";
@@ -59,7 +59,7 @@ const AppRoutes = () => {
       <Route path="/allocations" element={<ProtectedRoute><Allocations /></ProtectedRoute>} />
       <Route path="/category/:id" element={<ProtectedRoute><CategoryDetail /></ProtectedRoute>} />
       <Route path="/dividends" element={<ProtectedRoute><Dividends /></ProtectedRoute>} />
-      <Route path="/goals" element={<ProtectedRoute><Goals /></ProtectedRoute>} />
+      
       <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
       <Route path="/import" element={<ProtectedRoute><Import /></ProtectedRoute>} />
       <Route path="/export" element={<ProtectedRoute><Export /></ProtectedRoute>} />
