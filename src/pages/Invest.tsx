@@ -145,10 +145,15 @@ export default function Invest() {
                     </Select>
                   </div>
                   <div className="space-y-2">
-                    {selectedAssetType === 'israeli_fund' ? (
+                   {selectedAssetType === 'israeli_fund' ? (
                       <>
                         <Label htmlFor="fundNumber">מספר קרן (7 ספרות)</Label>
                         <Input id="fundNumber" name="fundNumber" placeholder="5131377" required dir="ltr" maxLength={7} />
+                      </>
+                    ) : selectedAssetType === 'bank_savings' ? (
+                      <>
+                        <Label htmlFor="symbol">מזהה (שם הבנק)</Label>
+                        <Input id="symbol" name="symbol" placeholder="לאומי" required />
                       </>
                     ) : (
                       <>
