@@ -41,6 +41,7 @@ export default function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [showSP500, setShowSP500] = useState(true);
+  const [selectedDivYear, setSelectedDivYear] = useState<number>(new Date().getFullYear());
   const { toast } = useToast();
   const navigate = useNavigate();
 
