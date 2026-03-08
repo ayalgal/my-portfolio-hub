@@ -165,22 +165,31 @@ export default function Dashboard() {
       monthKey: `${selectedDivYear}-${String(i + 1).padStart(2, '0')}`,
       gross: 0,
       net: 0,
+      prevYearNet: 0,
     }));
     dividends.forEach(d => {
       if (d.payment_date) {
         const date = new Date(d.payment_date);
-        if (date.getFullYear() !== selectedDivYear) return;
         const monthIdx = date.getMonth();
         const amountILS = convertToILS(d.amount, d.currency || 'ILS');
         const taxILS = convertToILS(d.tax_withheld || 0, d.currency || 'ILS');
         const grossC = convertFromILS(amountILS, displayCurrency);
         const netC = convertFromILS(amountILS - taxILS, displayCurrency);
-        result[monthIdx].gross += grossC;
-        result[monthIdx].net += netC;
+        if (date.getFullYear() === selectedDivYear) {
+          result[monthIdx].gross += grossC;
+          result[monthIdx].net += netC;
+        } else if (date.getFullYear() === selectedDivYear - 1) {
+          result[monthIdx].prevYearNet += netC;
+        }
       }
     });
-    return result.map(r => ({ ...r, gross: Math.round(r.gross), net: Math.round(r.net) }));
+    return result.map(r => ({ ...r, gross: Math.round(r.gross), net: Math.round(r.net), prevYearNet: Math.round(r.prevYearNet) }));
   }, [dividends, convertToILS, convertFromILS, displayCurrency, selectedDivYear]);
+
+  // YoY comparison
+  const currentYearTotal = dividendData.reduce((s, d) => s + d.net, 0);
+  const prevYearTotal = dividendData.reduce((s, d) => s + d.prevYearNet, 0);
+  const yoyChange = prevYearTotal > 0 ? ((currentYearTotal - prevYearTotal) / prevYearTotal) * 100 : 0;
 
   const handleRefreshPrices = async () => {
     setIsRefreshing(true);
