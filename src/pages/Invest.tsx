@@ -45,11 +45,13 @@ export default function Invest() {
   const [sortField, setSortField] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [filterText, setFilterText] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "category">("list");
   const { portfolios } = usePortfolio();
   const defaultPortfolioId = portfolios?.[0]?.id;
   const { holdings, isLoading, createHolding, deleteHolding } = useHoldings(defaultPortfolioId);
   const { categories, createCategory } = useAllocations();
   const { holdingCategories, assignCategory, removeCategory, getCategoriesForHolding } = useHoldingCategories();
+  const { convertToILS } = useExchangeRates();
   const { toast } = useToast();
 
   const toggleSort = (field: string) => {
