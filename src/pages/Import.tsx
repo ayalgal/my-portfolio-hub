@@ -184,7 +184,7 @@ export default function Import() {
   const [status, setStatus] = useState<'idle' | 'parsed' | 'error' | 'importing' | 'done'>('idle');
   const [aggregated, setAggregated] = useState<AggregatedHolding[]>([]);
   const { toast } = useToast();
-  const { portfolios } = usePortfolio();
+  const { portfolios, createPortfolio } = usePortfolio();
   const { createHolding } = useHoldings();
   const { createTransaction } = useTransactions();
 
