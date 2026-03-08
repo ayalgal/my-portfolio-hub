@@ -90,6 +90,19 @@ export default function Invest() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-2">
+                    {selectedAssetType === 'israeli_fund' ? (
+                      <>
+                        <Label htmlFor="fundNumber">מספר קרן (7 ספרות)</Label>
+                        <Input id="fundNumber" name="fundNumber" placeholder="5131377" required dir="ltr" maxLength={7} />
+                      </>
+                    ) : (
+                      <>
+                        <Label htmlFor="symbol">סימול</Label>
+                        <Input id="symbol" name="symbol" placeholder="AAPL" required dir="ltr" />
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="name">שם</Label>
