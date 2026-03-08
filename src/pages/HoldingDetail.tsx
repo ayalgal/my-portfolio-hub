@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -90,9 +90,11 @@ export default function HoldingDetail() {
             </div>
             <div className="flex items-center gap-2 mt-1">
               {holdingCats.map(hc => (
-                <Badge key={hc.id} variant="secondary" style={{ borderColor: (hc as any).allocation_categories?.color || undefined, color: (hc as any).allocation_categories?.color || undefined }}>
-                  {(hc as any).allocation_categories?.name}
-                </Badge>
+                <Link key={hc.id} to="/allocations">
+                  <Badge variant="secondary" className="cursor-pointer hover:opacity-80" style={{ borderColor: (hc as any).allocation_categories?.color || undefined, color: (hc as any).allocation_categories?.color || undefined }}>
+                    {(hc as any).allocation_categories?.name}
+                  </Badge>
+                </Link>
               ))}
             </div>
           </div>
