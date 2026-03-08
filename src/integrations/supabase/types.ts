@@ -94,6 +94,30 @@ export type Database = {
           },
         ]
       }
+      exchange_rates: {
+        Row: {
+          from_currency: string
+          id: string
+          rate: number
+          to_currency: string
+          updated_at: string
+        }
+        Insert: {
+          from_currency: string
+          id?: string
+          rate: number
+          to_currency?: string
+          updated_at?: string
+        }
+        Update: {
+          from_currency?: string
+          id?: string
+          rate?: number
+          to_currency?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       holding_categories: {
         Row: {
           category_id: string
@@ -136,7 +160,10 @@ export type Database = {
           average_cost: number
           created_at: string | null
           currency: string | null
+          current_price: number | null
+          fund_number: string | null
           id: string
+          last_price_update: string | null
           name: string
           notes: string | null
           portfolio_id: string
@@ -150,7 +177,10 @@ export type Database = {
           average_cost?: number
           created_at?: string | null
           currency?: string | null
+          current_price?: number | null
+          fund_number?: string | null
           id?: string
+          last_price_update?: string | null
           name: string
           notes?: string | null
           portfolio_id: string
@@ -164,7 +194,10 @@ export type Database = {
           average_cost?: number
           created_at?: string | null
           currency?: string | null
+          current_price?: number | null
+          fund_number?: string | null
           id?: string
+          last_price_update?: string | null
           name?: string
           notes?: string | null
           portfolio_id?: string
