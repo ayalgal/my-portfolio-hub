@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import HoldingDetail from "./pages/HoldingDetail";
 import Invest from "./pages/Invest";
 import Visualize from "./pages/Visualize";
 import Allocations from "./pages/Allocations";
