@@ -32,12 +32,20 @@ const getCurrencySymbol = (c: string) => ({ ILS: "₪", USD: "$", CAD: "C$", EUR
 export default function HoldingDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { portfolios } = usePortfolio();
-  const { holdings, isLoading: holdingsLoading } = useHoldings(portfolios?.[0]?.id);
+  const { holdings, isLoading: holdingsLoading, updateHolding } = useHoldings(portfolios?.[0]?.id);
   const { transactions, isLoading: txLoading } = useTransactions(id);
   const { dividends, isLoading: divLoading, totalDividends, totalTaxWithheld } = useDividends(id);
-  const { getCategoriesForHolding } = useHoldingCategories();
+  const { getCategoriesForHolding, assignCategory, removeCategory, holdingCategories } = useHoldingCategories();
+  const { categories } = useAllocations();
   const { pendingSplits, applySplit, dismissSplit } = useSplits();
+
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [txDialogOpen, setTxDialogOpen] = useState(false);
+  const [txType, setTxType] = useState<'buy' | 'sell'>('buy');
 
   const holding = holdings.find(h => h.id === id);
   const holdingSplits = pendingSplits.filter(s => s.holding_id === id);
