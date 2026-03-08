@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, TrendingDown, Wallet, PieChart as PieChartIcon, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, PieChart as PieChartIcon, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Trash2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useHoldings } from "@/hooks/useHoldings";
 import { useDividends } from "@/hooks/useDividends";
+import { useTransactions } from "@/hooks/useTransactions";
 import { useProfile } from "@/hooks/useProfile";
 import { useExchangeRates } from "@/hooks/useExchangeRates";
 import { useAllocations } from "@/hooks/useAllocations";
@@ -15,7 +16,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { useAuth } from "@/hooks/useAuth";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, BarChart, Bar } from "recharts";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 type DisplayCurrency = 'ILS' | 'USD' | 'CAD';
 
@@ -25,19 +31,22 @@ const currencySymbols: Record<DisplayCurrency, string> = {
   CAD: 'C$',
 };
 
-const getCurrencySymbol = (c: string) => ({ ILS: "₪", USD: "$", CAD: "C$", EUR: "€" }[c] || c);
-
 export default function Dashboard() {
+  const { user } = useAuth();
   const { holdings, isLoading: holdingsLoading } = useHoldings();
   const { dividends, isLoading: dividendsLoading } = useDividends();
+  const { transactions, isLoading: txLoading } = useTransactions();
   const { profile } = useProfile();
-  const { convertToILS, convertFromILS, rates, isLoading: ratesLoading } = useExchangeRates();
+  const { convertToILS, convertFromILS, isLoading: ratesLoading } = useExchangeRates();
   const { categories } = useAllocations();
   const { holdingCategories } = useHoldingCategories();
   const { portfolios } = usePortfolio();
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('ILS');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const [resetConfirmText, setResetConfirmText] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+  const [showSP500, setShowSP500] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -48,7 +57,7 @@ export default function Dashboard() {
     return `${currencySymbols[displayCurrency]}${converted.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
-  // Calculate totals in ILS first, then convert
+  // Calculate totals
   const totalCostILS = holdings.reduce((sum, h) => {
     const costInOrigCurrency = h.quantity * h.average_cost;
     return sum + convertToILS(costInOrigCurrency, h.currency || 'ILS');
@@ -96,17 +105,111 @@ export default function Dashboard() {
     color: c.color || "#8b5cf6",
   }));
 
+  // Performance chart data
+  const performanceData = useMemo(() => {
+    if (!transactions || transactions.length === 0) return [];
+
+    const sorted = [...transactions].sort((a, b) =>
+      new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime()
+    );
+
+    const firstDate = new Date(sorted[0].transaction_date);
+    const now = new Date();
+
+    const monthlyData: { date: string; invested: number; label: string; sp500?: number }[] = [];
+    let cumInvested = 0;
+
+    const current = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
+    while (current <= now) {
+      const monthTxs = sorted.filter(tx => {
+        const txDate = new Date(tx.transaction_date);
+        return txDate.getFullYear() === current.getFullYear() && txDate.getMonth() === current.getMonth();
+      });
+
+      for (const tx of monthTxs) {
+        if (tx.transaction_type === 'buy') cumInvested += tx.total_amount;
+        else if (tx.transaction_type === 'sell') cumInvested -= tx.total_amount;
+      }
+
+      const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
+      monthlyData.push({
+        date: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`,
+        invested: Math.round(cumInvested),
+        label: `${monthNames[current.getMonth()]} ${current.getFullYear().toString().slice(2)}`,
+      });
+
+      current.setMonth(current.getMonth() + 1);
+    }
+
+    if (monthlyData.length > 1) {
+      const monthlyReturn = Math.pow(1.10, 1 / 12);
+      let sp500Value = monthlyData[0].invested;
+
+      return monthlyData.map((d, i) => {
+        if (i === 0) return { ...d, sp500: d.invested };
+        const prevData = monthlyData[i - 1];
+        const newInvestment = d.invested - prevData.invested;
+        sp500Value = sp500Value * monthlyReturn + newInvestment;
+        return { ...d, sp500: Math.round(sp500Value) };
+      });
+    }
+
+    return monthlyData.map(d => ({ ...d, sp500: d.invested }));
+  }, [transactions]);
+
+  // Dividends by month
+  const dividendData = useMemo(() => {
+    const monthMap = new Map<string, number>();
+    dividends.forEach(d => {
+      if (d.payment_date) {
+        const date = new Date(d.payment_date);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthMap.set(key, (monthMap.get(key) || 0) + d.amount);
+      }
+    });
+    return Array.from(monthMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12)
+      .map(([month, amount]) => {
+        const [, m] = month.split('-');
+        const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
+        return { month: monthNames[parseInt(m) - 1], amount: Math.round(amount) };
+      });
+  }, [dividends]);
+
   const handleRefreshPrices = async () => {
     setIsRefreshing(true);
     try {
-      const { error } = await supabase.functions.invoke('fetch-prices');
+      const { data, error } = await supabase.functions.invoke('fetch-prices');
       if (error) throw error;
-      toast({ title: "מחירים עודכנו", description: "המחירים עודכנו בהצלחה" });
+      const msg = data?.dividendsAdded ? `עודכנו ${data.updated} מחירים, נוספו ${data.dividendsAdded} דיבידנדים` : `עודכנו ${data?.updated || 0} מחירים`;
+      toast({ title: "מחירים עודכנו", description: msg });
       window.location.reload();
     } catch {
       toast({ variant: "destructive", title: "שגיאה", description: "לא ניתן לעדכן מחירים" });
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  const handleResetData = async () => {
+    if (!user?.id) return;
+    setIsResetting(true);
+    try {
+      // Delete in order: dividends, transactions, holding_categories, holdings, stock_splits
+      await supabase.from('dividends').delete().eq('user_id', user.id);
+      await supabase.from('transactions').delete().eq('user_id', user.id);
+      await supabase.from('holding_categories').delete().eq('user_id', user.id);
+      await supabase.from('stock_splits').delete().eq('user_id', user.id);
+      await supabase.from('holdings').delete().eq('user_id', user.id);
+      
+      toast({ title: "הנתונים נמחקו", description: "כל ההחזקות, העסקאות והדיבידנדים נמחקו" });
+      window.location.reload();
+    } catch (err) {
+      toast({ variant: "destructive", title: "שגיאה", description: "לא ניתן למחוק נתונים" });
+    } finally {
+      setIsResetting(false);
+      setResetConfirmText("");
     }
   };
 
@@ -118,7 +221,7 @@ export default function Dashboard() {
             <h1 className="text-3xl font-bold">שלום {displayName}! 👋</h1>
             <p className="text-muted-foreground">סקירה כללית של הפורטפוליו שלך</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Tabs value={displayCurrency} onValueChange={(v) => setDisplayCurrency(v as DisplayCurrency)}>
               <TabsList>
                 <TabsTrigger value="ILS">₪ שקל</TabsTrigger>
@@ -126,15 +229,57 @@ export default function Dashboard() {
                 <TabsTrigger value="CAD">C$ קנדי</TabsTrigger>
               </TabsList>
             </Tabs>
-            <Button variant="outline" size="icon" onClick={handleRefreshPrices} disabled={isRefreshing}>
+            <Button variant="outline" size="icon" onClick={handleRefreshPrices} disabled={isRefreshing} title="עדכן מחירים">
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
             <Button asChild>
               <Link to="/invest"><Plus className="ml-2 h-4 w-4" />הוסף נייר ערך</Link>
             </Button>
+            
+            {/* Reset Button */}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" title="איפוס נתונים">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent dir="rtl">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>איפוס כל הנתונים</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    פעולה זו תמחק את כל ההחזקות, העסקאות והדיבידנדים שלך.
+                    <br />
+                    <strong className="text-destructive">פעולה זו בלתי הפיכה!</strong>
+                    <br /><br />
+                    כדי לאשר, הקלד <strong>מחק הכל</strong> בשדה למטה:
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="py-4">
+                  <Label htmlFor="confirm-reset">אישור מחיקה</Label>
+                  <Input
+                    id="confirm-reset"
+                    value={resetConfirmText}
+                    onChange={(e) => setResetConfirmText(e.target.value)}
+                    placeholder='הקלד "מחק הכל"'
+                    className="mt-2"
+                  />
+                </div>
+                <AlertDialogFooter className="flex-row-reverse gap-2">
+                  <AlertDialogCancel>ביטול</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleResetData}
+                    disabled={resetConfirmText !== "מחק הכל" || isResetting}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isResetting ? "מוחק..." : "מחק הכל"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
 
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -154,11 +299,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">רווח/הפסד</CardTitle>
-              {totalGainILS >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-green-500" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-red-500" />
-              )}
+              {totalGainILS >= 0 ? <TrendingUp className="h-4 w-4 text-green-500" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
             </CardHeader>
             <CardContent>
               {isLoading ? <Skeleton className="h-8 w-24" /> : (
@@ -222,40 +363,20 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Pie Chart */}
                 <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        dataKey="value"
-                        nameKey="name"
-                        stroke="none"
-                      >
-                        {pieData.map((entry, idx) => (
-                          <Cell key={idx} fill={entry.color} />
-                        ))}
+                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value" nameKey="name" stroke="none">
+                        {pieData.map((entry, idx) => (<Cell key={idx} fill={entry.color} />))}
                       </Pie>
-                      <Tooltip
-                        formatter={(value: number) => [`$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, 'שווי']}
-                        contentStyle={{ direction: 'rtl' }}
-                      />
+                      <Tooltip formatter={(value: number) => [`$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, 'שווי']} contentStyle={{ direction: 'rtl' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-
-                {/* Category List */}
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-64 overflow-y-auto">
                   {categoryData.map((cat) => (
                     <div key={cat.id}>
-                      <button
-                        className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors text-right"
-                        onClick={() => setExpandedCategory(expandedCategory === cat.id ? null : cat.id)}
-                      >
+                      <button className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors text-right" onClick={() => setExpandedCategory(expandedCategory === cat.id ? null : cat.id)}>
                         <div className="flex items-center gap-3">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color || "#8b5cf6" }} />
                           <span className="font-medium">{cat.name}</span>
@@ -270,11 +391,7 @@ export default function Dashboard() {
                       {expandedCategory === cat.id && (
                         <div className="mr-6 space-y-1 pb-2">
                           {cat.holdings.map(h => (
-                            <button
-                              key={h.id}
-                              className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-muted/30 text-sm text-right"
-                              onClick={() => navigate(`/holding/${h.id}`)}
-                            >
+                            <button key={h.id} className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-muted/30 text-sm text-right" onClick={() => navigate(`/holding/${h.id}`)}>
                               <span>{h.name} <span className="text-muted-foreground">({h.symbol})</span></span>
                               <span dir="ltr" className="text-muted-foreground">${getHoldingValueUSD(h).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
                             </button>
@@ -289,6 +406,69 @@ export default function Dashboard() {
           </Card>
         )}
 
+        {/* Performance & Dividends Charts */}
+        {holdings.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Performance Chart */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>ביצועים לאורך זמן</CardTitle>
+                  <CardDescription>סכום מושקע מצטבר</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch id="sp500" checked={showSP500} onCheckedChange={setShowSP500} />
+                  <Label htmlFor="sp500" className="text-xs">S&P 500</Label>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {performanceData.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-12">אין עסקאות להצגה</p>
+                ) : (
+                  <div className="h-[250px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={performanceData}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={Math.max(0, Math.floor(performanceData.length / 6))} />
+                        <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name === 'invested' ? 'מושקע' : 'S&P 500']} contentStyle={{ direction: 'rtl' }} />
+                        <Legend formatter={(value) => value === 'invested' ? 'מושקע' : 'S&P 500 (10%)'} />
+                        <Line type="monotone" dataKey="invested" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="invested" />
+                        {showSP500 && <Line type="monotone" dataKey="sp500" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={false} name="sp500" />}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Dividends Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle>דיבידנדים חודשיים</CardTitle>
+                <CardDescription>הכנסות מדיבידנדים</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {dividendData.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-12">אין דיבידנדים — לחץ ↻ לעדכון</p>
+                ) : (
+                  <div className="h-[250px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dividendData}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="month" tick={{ fontSize: 10 }} />
+                        <YAxis tickFormatter={(v) => `$${v}`} tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, 'דיבידנד']} />
+                        <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {holdings.length === 0 && !isLoading && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card>
@@ -297,12 +477,8 @@ export default function Dashboard() {
                 <CardDescription>הוסף את ניירות הערך הראשונים שלך או ייבא נתונים מקובץ</CardDescription>
               </CardHeader>
               <CardContent className="flex gap-4">
-                <Button asChild>
-                  <Link to="/invest"><Plus className="ml-2 h-4 w-4" />הוסף ידנית</Link>
-                </Button>
-                <Button variant="outline" asChild>
-                  <Link to="/import"><ArrowUpLeft className="ml-2 h-4 w-4" />ייבא קובץ</Link>
-                </Button>
+                <Button asChild><Link to="/invest"><Plus className="ml-2 h-4 w-4" />הוסף ידנית</Link></Button>
+                <Button variant="outline" asChild><Link to="/import"><ArrowUpLeft className="ml-2 h-4 w-4" />ייבא קובץ</Link></Button>
               </CardContent>
             </Card>
             <Card>
@@ -311,9 +487,7 @@ export default function Dashboard() {
                 <CardDescription>הגדר יעדים וטרגטים למעקב אחר ההתקדמות שלך</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button variant="outline" asChild>
-                  <Link to="/goals">הגדר יעדים</Link>
-                </Button>
+                <Button variant="outline" asChild><Link to="/goals">הגדר יעדים</Link></Button>
               </CardContent>
             </Card>
           </div>

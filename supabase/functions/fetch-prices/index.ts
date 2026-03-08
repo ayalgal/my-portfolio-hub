@@ -5,43 +5,38 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-async function fetchYahooPrice(symbol: string): Promise<number | null> {
+async function fetchYahooData(symbol: string, fromDate?: Date): Promise<{
+  price: number | null;
+  splits: { date: string; numerator: number; denominator: number }[];
+  dividends: { date: string; amount: number }[];
+}> {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data?.chart?.result?.[0]?.meta?.regularMarketPrice ?? null;
-  } catch {
-    console.error(`Failed to fetch price for ${symbol}`);
-    return null;
-  }
-}
-
-interface SplitEvent {
-  date: string;
-  numerator: number;
-  denominator: number;
-}
-
-interface DividendEvent {
-  date: string;
-  amount: number;
-}
-
-async function fetchYahooSplitsAndDividends(symbol: string, fromDate: Date): Promise<{ splits: SplitEvent[]; dividends: DividendEvent[] }> {
-  try {
-    const period1 = Math.floor(fromDate.getTime() / 1000);
+    const period1 = fromDate ? Math.floor(fromDate.getTime() / 1000) : Math.floor((Date.now() - 2 * 365 * 86400000) / 1000);
     const period2 = Math.floor(Date.now() / 1000);
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&events=splits,div`;
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-    if (!res.ok) return { splits: [], dividends: [] };
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?period1=${period1}&period2=${period2}&interval=1d&events=splits%2Cdiv`;
+    
+    console.log(`Fetching Yahoo data for ${symbol}`);
+    const res = await fetch(url, { 
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    });
+    
+    if (!res.ok) {
+      console.log(`Yahoo returned ${res.status} for ${symbol}`);
+      return { price: null, splits: [], dividends: [] };
+    }
+    
     const data = await res.json();
     const result = data?.chart?.result?.[0];
+    if (!result) {
+      console.log(`No chart result for ${symbol}`);
+      return { price: null, splits: [], dividends: [] };
+    }
+
+    const price = result?.meta?.regularMarketPrice ?? null;
 
     // Parse splits
     const splitsRaw = result?.events?.splits;
-    const splits: SplitEvent[] = splitsRaw
+    const splits = splitsRaw
       ? Object.values(splitsRaw).map((s: any) => ({
           date: new Date(s.date * 1000).toISOString().split('T')[0],
           numerator: s.numerator,
@@ -51,17 +46,18 @@ async function fetchYahooSplitsAndDividends(symbol: string, fromDate: Date): Pro
 
     // Parse dividends
     const divsRaw = result?.events?.dividends;
-    const dividends: DividendEvent[] = divsRaw
+    const dividends = divsRaw
       ? Object.values(divsRaw).map((d: any) => ({
           date: new Date(d.date * 1000).toISOString().split('T')[0],
           amount: d.amount,
         }))
       : [];
 
-    return { splits, dividends };
-  } catch {
-    console.error(`Failed to fetch events for ${symbol}`);
-    return { splits: [], dividends: [] };
+    console.log(`${symbol}: price=${price}, splits=${splits.length}, dividends=${dividends.length}`);
+    return { price, splits, dividends };
+  } catch (err) {
+    console.error(`Error fetching ${symbol}:`, err);
+    return { price: null, splits: [], dividends: [] };
   }
 }
 
@@ -70,7 +66,7 @@ async function fetchExchangeRates(): Promise<{ USDILS: number; CADILS: number; U
     const pairs = ['USDILS=X', 'CADILS=X'];
     const rates: Record<string, number> = {};
     for (const pair of pairs) {
-      const price = await fetchYahooPrice(pair);
+      const { price } = await fetchYahooData(pair);
       if (price) rates[pair.replace('=X', '')] = price;
     }
     return {
@@ -106,8 +102,9 @@ Deno.serve(async (req) => {
       .gt('quantity', 0);
 
     if (holdingsError) throw holdingsError;
+    console.log(`Processing ${holdings?.length || 0} holdings`);
 
-    // Get earliest transaction date per holding for dividend filtering
+    // Get earliest transaction date per holding
     const { data: txDates } = await supabase
       .from('transactions')
       .select('holding_id, transaction_date')
@@ -121,6 +118,24 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Get quantity at each dividend date from transactions
+    function getQuantityAtDate(holdingId: string, date: string): number {
+      const txs = (txDates || []).filter(t => t.holding_id === holdingId);
+      // For now use all buy txs before date
+      let qty = 0;
+      for (const tx of allTxs.filter(t => t.holding_id === holdingId && t.transaction_date <= date)) {
+        if (tx.transaction_type === 'buy') qty += tx.quantity;
+        else if (tx.transaction_type === 'sell') qty -= tx.quantity;
+      }
+      return qty > 0 ? qty : 0;
+    }
+
+    // Get ALL transactions for quantity-at-date calculation
+    const { data: allTxs } = await supabase
+      .from('transactions')
+      .select('holding_id, transaction_type, quantity, transaction_date')
+      .order('transaction_date', { ascending: true });
+
     let updated = 0;
     let failed = 0;
     let splitsDetected = 0;
@@ -131,8 +146,17 @@ Deno.serve(async (req) => {
 
       const yahooSymbol = getYahooSymbol(holding);
 
-      // Fetch price
-      const price = await fetchYahooPrice(yahooSymbol);
+      // Get events from earliest transaction minus 1 month buffer
+      const earliestDate = earliestTxDate[holding.id]
+        ? new Date(earliestTxDate[holding.id])
+        : new Date(holding.created_at || '2020-01-01');
+      const eventsFrom = new Date(earliestDate);
+      eventsFrom.setMonth(eventsFrom.getMonth() - 1);
+
+      // Single API call per holding: price + splits + dividends
+      const { price, splits, dividends } = await fetchYahooData(yahooSymbol, eventsFrom);
+
+      // Update price
       if (price !== null) {
         const { error } = await supabase
           .from('holdings')
@@ -144,20 +168,17 @@ Deno.serve(async (req) => {
         failed++;
       }
 
-      // Fetch splits and dividends
-      // Fetch events from earliest transaction or 2 years back
-      const earliestDate = earliestTxDate[holding.id] 
-        ? new Date(earliestTxDate[holding.id]) 
-        : new Date(holding.created_at || '2020-01-01');
-      const eventsFrom = new Date(earliestDate);
-      eventsFrom.setMonth(eventsFrom.getMonth() - 1); // 1 month buffer
-      const { splits, dividends } = await fetchYahooSplitsAndDividends(yahooSymbol, eventsFrom);
-
       // Store splits
       for (const split of splits) {
-        const { error: splitError } = await supabase
+        const { data: existingSplit } = await supabase
           .from('stock_splits')
-          .upsert({
+          .select('id')
+          .eq('holding_id', holding.id)
+          .eq('split_date', split.date)
+          .maybeSingle();
+
+        if (!existingSplit) {
+          await supabase.from('stock_splits').insert({
             holding_id: holding.id,
             user_id: holding.user_id,
             symbol: holding.symbol,
@@ -165,24 +186,21 @@ Deno.serve(async (req) => {
             ratio_from: split.denominator,
             ratio_to: split.numerator,
             status: 'pending',
-          }, {
-            onConflict: 'holding_id,split_date,ratio_from,ratio_to',
-            ignoreDuplicates: true,
           });
-        if (!splitError) splitsDetected++;
+          splitsDetected++;
+        }
       }
 
-      // Store dividends — only for dates when user held the stock
+      // Store dividends
       for (const div of dividends) {
-        const divDate = new Date(div.date);
-        const holdingStart = earliestTxDate[holding.id] 
+        const holdingStart = earliestTxDate[holding.id]
           ? new Date(earliestTxDate[holding.id])
-          : new Date(holding.created_at || '2099-01-01');
-        
-        // Only add dividends after user first purchased
-        if (divDate < holdingStart) continue;
+          : null;
 
-        // Upsert dividend — use holding_id + payment_date as natural key
+        // Only add dividends after user first purchased
+        if (!holdingStart || new Date(div.date) < holdingStart) continue;
+
+        // Check if already exists
         const { data: existing } = await supabase
           .from('dividends')
           .select('id')
@@ -191,8 +209,21 @@ Deno.serve(async (req) => {
           .maybeSingle();
 
         if (!existing) {
-          const totalAmount = div.amount * holding.quantity;
+          // Calculate shares held at dividend date from transactions
+          const qtyAtDate = (() => {
+            let qty = 0;
+            for (const tx of (allTxs || []).filter(t => t.holding_id === holding.id && t.transaction_date <= div.date)) {
+              if (tx.transaction_type === 'buy') qty += tx.quantity;
+              else if (tx.transaction_type === 'sell') qty -= tx.quantity;
+            }
+            return qty > 0 ? qty : holding.quantity;
+          })();
+
+          const totalAmount = div.amount * qtyAtDate;
           const taxRate = holding.currency === 'USD' ? 0.25 : 0.15;
+          
+          console.log(`Adding dividend for ${holding.symbol}: ${div.date}, $${div.amount}/share × ${qtyAtDate} shares = $${totalAmount.toFixed(2)}`);
+          
           const { error: divError } = await supabase
             .from('dividends')
             .insert({
@@ -202,17 +233,18 @@ Deno.serve(async (req) => {
               currency: holding.currency || 'USD',
               payment_date: div.date,
               ex_date: div.date,
-              shares_at_payment: holding.quantity,
+              shares_at_payment: qtyAtDate,
               is_israeli: holding.currency === 'ILS',
               tax_withheld: totalAmount * taxRate,
               notes: `דיבידנד $${div.amount}/מניה — יובא אוטומטית`,
             });
           if (!divError) dividendsAdded++;
+          else console.error(`Dividend insert error for ${holding.symbol}:`, divError);
         }
       }
 
-      // Rate limit
-      await new Promise(r => setTimeout(r, 200));
+      // Rate limit - shorter delay since we do 1 call per holding now
+      await new Promise(r => setTimeout(r, 150));
     }
 
     // Update exchange rates
@@ -232,6 +264,8 @@ Deno.serve(async (req) => {
           );
       }
     }
+
+    console.log(`Done: ${updated} updated, ${failed} failed, ${splitsDetected} splits, ${dividendsAdded} dividends`);
 
     return new Response(
       JSON.stringify({ success: true, updated, failed, splitsDetected, dividendsAdded, rates_updated: !!rates }),
