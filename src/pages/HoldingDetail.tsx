@@ -107,13 +107,24 @@ export default function HoldingDetail() {
             </div>
             <div className="flex items-center gap-2 mt-1">
               {holdingCats.map(hc => (
-                <Link key={hc.id} to="/allocations">
+                <Link key={hc.id} to={`/category/${hc.category_id}`}>
                   <Badge variant="secondary" className="cursor-pointer hover:opacity-80" style={{ borderColor: (hc as any).allocation_categories?.color || undefined, color: (hc as any).allocation_categories?.color || undefined }}>
                     {(hc as any).allocation_categories?.name}
                   </Badge>
                 </Link>
               ))}
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setEditDialogOpen(true)}>
+              <Pencil className="h-4 w-4 ml-1" />עריכה
+            </Button>
+            <Button variant="default" size="sm" onClick={() => { setTxType('buy'); setTxDialogOpen(true); }}>
+              <ShoppingCart className="h-4 w-4 ml-1" />קנייה
+            </Button>
+            <Button variant="destructive" size="sm" onClick={() => { setTxType('sell'); setTxDialogOpen(true); }}>
+              מכירה
+            </Button>
           </div>
         </div>
 
