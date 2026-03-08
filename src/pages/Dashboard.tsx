@@ -401,7 +401,14 @@ export default function Dashboard() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>דיבידנדים חודשיים</CardTitle>
-                  <CardDescription>הכנסות מדיבידנדים — לחץ על חודש לפירוט</CardDescription>
+                  <CardDescription>
+                    הכנסות מדיבידנדים — לחץ על חודש לפירוט
+                    {prevYearTotal > 0 && (
+                      <span className={`mr-2 font-semibold ${yoyChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        ({yoyChange >= 0 ? '+' : ''}{yoyChange.toFixed(1)}% מול {selectedDivYear - 1})
+                      </span>
+                    )}
+                  </CardDescription>
                 </div>
                 {dividendYears.length > 1 && (
                   <div className="flex items-center gap-1">
