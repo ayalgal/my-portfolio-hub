@@ -4,14 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ArrowRight, TrendingUp, TrendingDown, DollarSign, Calendar } from "lucide-react";
+import { ArrowRight, TrendingUp, TrendingDown, DollarSign, Calendar, SplitSquareVertical, Check, X, Loader2 } from "lucide-react";
 import { useHoldings, Holding } from "@/hooks/useHoldings";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useDividends } from "@/hooks/useDividends";
+import { useSplits } from "@/hooks/useSplits";
 import { useHoldingCategories } from "@/hooks/useHoldingCategories";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 const getCurrencySymbol = (c: string) => ({ ILS: "₪", USD: "$", CAD: "C$", EUR: "€" }[c] || c);
 
@@ -23,8 +25,10 @@ export default function HoldingDetail() {
   const { transactions, isLoading: txLoading } = useTransactions(id);
   const { dividends, isLoading: divLoading, totalDividends, totalTaxWithheld } = useDividends(id);
   const { getCategoriesForHolding } = useHoldingCategories();
+  const { pendingSplits, applySplit, dismissSplit } = useSplits();
 
   const holding = holdings.find(h => h.id === id);
+  const holdingSplits = pendingSplits.filter(s => s.holding_id === id);
 
   if (holdingsLoading) {
     return (
@@ -58,6 +62,11 @@ export default function HoldingDetail() {
   const pnlPercent = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
   const holdingCats = getCategoriesForHolding(holding.id);
 
+  // Total return = price P&L + dividends after tax
+  const netDividends = totalDividends - totalTaxWithheld;
+  const totalReturn = pnl + netDividends;
+  const totalReturnPercent = totalCost > 0 ? (totalReturn / totalCost) * 100 : 0;
+
   // Forward dividend estimate (last dividend × 4 annualized)
   const lastDiv = dividends.length > 0 ? dividends[0] : null;
   const forwardDivPerShare = lastDiv ? (lastDiv.amount / (lastDiv.shares_at_payment || holding.quantity)) * 4 : 0;
@@ -86,8 +95,49 @@ export default function HoldingDetail() {
           </div>
         </div>
 
+        {/* Split alerts for this holding */}
+        {holdingSplits.length > 0 && (
+          <Card className="border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-400 text-base">
+                <SplitSquareVertical className="h-5 w-5" />
+                ספליטים שזוהו ({holdingSplits.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {holdingSplits.map((split) => {
+                const ratio = split.ratio_to / split.ratio_from;
+                const desc = ratio > 1
+                  ? `ספליט ${split.ratio_from}:${split.ratio_to} — כל מניה תהפוך ל-${ratio} מניות`
+                  : `איחוד ${split.ratio_from}:${split.ratio_to} — כל ${split.ratio_from / split.ratio_to} מניות יהפכו למניה אחת`;
+                return (
+                  <Alert key={split.id} className="bg-background">
+                    <AlertTitle className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{split.ratio_from}:{split.ratio_to}</Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(split.split_date).toLocaleDateString('he-IL')}
+                        </span>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="default" onClick={() => applySplit.mutate(split.id)} disabled={applySplit.isPending}>
+                          {applySplit.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="h-4 w-4 ml-1" />החל</>}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => dismissSplit.mutate(split.id)} disabled={dismissSplit.isPending}>
+                          <X className="h-4 w-4 ml-1" />התעלם
+                        </Button>
+                      </div>
+                    </AlertTitle>
+                    <AlertDescription className="mt-1 text-sm">{desc}</AlertDescription>
+                  </Alert>
+                );
+              })}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <Card>
             <CardContent className="pt-4 pb-4">
               <p className="text-xs text-muted-foreground">שווי נוכחי</p>
@@ -96,7 +146,7 @@ export default function HoldingDetail() {
           </Card>
           <Card>
             <CardContent className="pt-4 pb-4">
-              <p className="text-xs text-muted-foreground">רווח/הפסד</p>
+              <p className="text-xs text-muted-foreground">רווח/הפסד מחיר</p>
               <p className={`text-2xl font-bold ${pnl >= 0 ? 'text-green-500' : 'text-red-500'}`} dir="ltr">
                 {pnl >= 0 ? '+' : ''}{currSym}{pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}
               </p>
@@ -105,9 +155,18 @@ export default function HoldingDetail() {
           </Card>
           <Card>
             <CardContent className="pt-4 pb-4">
-              <p className="text-xs text-muted-foreground">דיבידנדים שהתקבלו</p>
-              <p className="text-2xl font-bold" dir="ltr">{currSym}{totalDividends.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-              <p className="text-xs text-muted-foreground">מס: {currSym}{totalTaxWithheld.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+              <p className="text-xs text-muted-foreground">דיבידנדים נטו</p>
+              <p className="text-2xl font-bold text-green-500" dir="ltr">{currSym}{netDividends.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+              <p className="text-xs text-muted-foreground">ברוטו: {currSym}{totalDividends.toLocaleString(undefined, { maximumFractionDigits: 0 })} | מס: {currSym}{totalTaxWithheld.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-primary/30">
+            <CardContent className="pt-4 pb-4">
+              <p className="text-xs text-muted-foreground">תשואה כוללת (מחיר + דיבידנד)</p>
+              <p className={`text-2xl font-bold ${totalReturn >= 0 ? 'text-green-500' : 'text-red-500'}`} dir="ltr">
+                {totalReturn >= 0 ? '+' : ''}{currSym}{totalReturn.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </p>
+              <p className={`text-xs ${totalReturn >= 0 ? 'text-green-500' : 'text-red-500'}`}>{totalReturnPercent.toFixed(1)}%</p>
             </CardContent>
           </Card>
           <Card>
@@ -163,8 +222,8 @@ export default function HoldingDetail() {
                         <TableRow key={tx.id}>
                           <TableCell dir="ltr">{tx.transaction_date}</TableCell>
                           <TableCell>
-                            <Badge variant={tx.transaction_type === 'buy' ? 'default' : 'destructive'}>
-                              {tx.transaction_type === 'buy' ? 'קנייה' : tx.transaction_type === 'sell' ? 'מכירה' : tx.transaction_type}
+                            <Badge variant={tx.transaction_type === 'buy' ? 'default' : tx.transaction_type === 'sell' ? 'destructive' : 'secondary'}>
+                              {tx.transaction_type === 'buy' ? 'קנייה' : tx.transaction_type === 'sell' ? 'מכירה' : tx.transaction_type === 'split' ? 'ספליט' : tx.transaction_type}
                             </Badge>
                           </TableCell>
                           <TableCell dir="ltr">{tx.quantity.toLocaleString()}</TableCell>
