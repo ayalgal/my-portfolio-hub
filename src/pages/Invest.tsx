@@ -166,22 +166,41 @@ export default function Invest() {
                     <TableHead className="text-right">סוג</TableHead>
                     <TableHead className="text-right">כמות</TableHead>
                     <TableHead className="text-right">עלות ממוצעת</TableHead>
+                    <TableHead className="text-right">מחיר נוכחי</TableHead>
                     <TableHead className="text-right">שווי כולל</TableHead>
+                    <TableHead className="text-right">רווח/הפסד</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {holdings.map((holding) => {
-                    const totalValue = holding.quantity * holding.average_cost;
+                    const currentPrice = holding.current_price ?? holding.average_cost;
+                    const totalValue = holding.quantity * currentPrice;
+                    const totalCost = holding.quantity * holding.average_cost;
+                    const pnl = totalValue - totalCost;
+                    const pnlPercent = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
                     const currencySymbol = getCurrencySymbol(holding.currency || "ILS");
                     return (
                       <TableRow key={holding.id}>
-                        <TableCell className="font-medium" dir="ltr">{holding.symbol}</TableCell>
+                        <TableCell className="font-medium" dir="ltr">
+                          {holding.fund_number || holding.symbol}
+                        </TableCell>
                         <TableCell>{holding.name}</TableCell>
                         <TableCell>{getAssetTypeLabel(holding.asset_type)}</TableCell>
                         <TableCell dir="ltr">{holding.quantity.toLocaleString()}</TableCell>
                         <TableCell dir="ltr">{currencySymbol}{holding.average_cost.toLocaleString()}</TableCell>
+                        <TableCell dir="ltr">
+                          {holding.current_price 
+                            ? `${currencySymbol}${holding.current_price.toLocaleString()}`
+                            : <span className="text-muted-foreground">—</span>
+                          }
+                        </TableCell>
                         <TableCell dir="ltr" className="font-semibold">{currencySymbol}{totalValue.toLocaleString()}</TableCell>
+                        <TableCell dir="ltr" className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
+                          {holding.current_price ? (
+                            <>{pnl >= 0 ? '+' : ''}{currencySymbol}{pnl.toLocaleString(undefined, {maximumFractionDigits: 0})} ({pnlPercent.toFixed(1)}%)</>
+                          ) : '—'}
+                        </TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
