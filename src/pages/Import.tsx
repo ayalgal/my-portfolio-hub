@@ -7,6 +7,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useHoldings } from "@/hooks/useHoldings";
 import { useTransactions } from "@/hooks/useTransactions";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { useAllocations } from "@/hooks/useAllocations";
+import { useHoldingCategories } from "@/hooks/useHoldingCategories";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -194,6 +198,9 @@ export default function Import() {
   const { portfolios, createPortfolio } = usePortfolio();
   const { createHolding } = useHoldings();
   const { createTransaction } = useTransactions();
+  const { categories, createCategory } = useAllocations();
+  const { assignCategory } = useHoldingCategories();
+  const { user } = useAuth();
 
   const toggleSelect = (symbol: string) => {
     setAggregated(prev => prev.map(h => h.symbol === symbol ? { ...h, selected: !h.selected } : h));
@@ -343,6 +350,21 @@ export default function Import() {
             });
           } catch {
             // Transaction creation is best-effort
+          }
+        }
+
+        // Assign category based on folder name from Donatello
+        if (holding.folder && user?.id) {
+          try {
+            let cat = categories.find(c => c.name === holding.folder);
+            if (!cat) {
+              cat = await createCategory.mutateAsync({ name: holding.folder });
+            }
+            if (cat) {
+              await assignCategory.mutateAsync({ holdingId: result.id, categoryId: cat.id });
+            }
+          } catch {
+            // Category assignment is best-effort
           }
         }
 
