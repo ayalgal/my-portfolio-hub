@@ -102,7 +102,7 @@ export default function Dashboard() {
   }));
 
   // Performance chart data
-  const performanceData = useMemo(() => {
+  const investmentMonthlyData = useMemo(() => {
     if (!transactions || transactions.length === 0) return [];
 
     const sorted = [...transactions].sort((a, b) =>
@@ -111,8 +111,7 @@ export default function Dashboard() {
 
     const firstDate = new Date(sorted[0].transaction_date);
     const now = new Date();
-
-    const monthlyData: { date: string; invested: number; label: string; sp500?: number }[] = [];
+    const monthlyData: { date: string; invested: number; label: string }[] = [];
     let cumInvested = 0;
 
     const current = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
@@ -121,37 +120,32 @@ export default function Dashboard() {
         const txDate = new Date(tx.transaction_date);
         return txDate.getFullYear() === current.getFullYear() && txDate.getMonth() === current.getMonth();
       });
-
       for (const tx of monthTxs) {
         if (tx.transaction_type === 'buy') cumInvested += tx.total_amount;
         else if (tx.transaction_type === 'sell') cumInvested -= tx.total_amount;
       }
-
       const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
       monthlyData.push({
         date: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`,
         invested: Math.round(cumInvested),
         label: `${monthNames[current.getMonth()]} ${current.getFullYear().toString().slice(2)}`,
       });
-
       current.setMonth(current.getMonth() + 1);
     }
-
-    if (monthlyData.length > 1) {
-      const monthlyReturn = Math.pow(1.10, 1 / 12);
-      let sp500Value = monthlyData[0].invested;
-
-      return monthlyData.map((d, i) => {
-        if (i === 0) return { ...d, sp500: d.invested };
-        const prevData = monthlyData[i - 1];
-        const newInvestment = d.invested - prevData.invested;
-        sp500Value = sp500Value * monthlyReturn + newInvestment;
-        return { ...d, sp500: Math.round(sp500Value) };
-      });
-    }
-
-    return monthlyData.map(d => ({ ...d, sp500: d.invested }));
+    return monthlyData;
   }, [transactions]);
+
+  const firstTxDate = transactions?.length ? [...transactions].sort((a, b) => a.transaction_date.localeCompare(b.transaction_date))[0]?.transaction_date : undefined;
+  const { data: sp500Data } = useSP500Data(firstTxDate);
+
+  const performanceData = useMemo(() => {
+    if (investmentMonthlyData.length === 0) return [];
+    const sp500Values = calcSP500Comparison(investmentMonthlyData, sp500Data || []);
+    return investmentMonthlyData.map((d, i) => ({
+      ...d,
+      sp500: sp500Values[i],
+    }));
+  }, [investmentMonthlyData, sp500Data]);
 
   // Available years for dividends
   const dividendYears = useMemo(() => {
