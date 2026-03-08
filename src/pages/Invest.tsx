@@ -79,12 +79,8 @@ export default function Invest() {
               <form onSubmit={handleAddHolding} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="symbol">סימול</Label>
-                    <Input id="symbol" name="symbol" placeholder="AAPL" required dir="ltr" />
-                  </div>
-                  <div className="space-y-2">
                     <Label htmlFor="assetType">סוג נכס</Label>
-                    <Select name="assetType" defaultValue="stock">
+                    <Select name="assetType" defaultValue="stock" onValueChange={setSelectedAssetType}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="stock">מניה</SelectItem>
