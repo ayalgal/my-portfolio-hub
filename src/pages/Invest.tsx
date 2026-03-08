@@ -224,6 +224,21 @@ export default function Invest() {
           const activeHoldings = filtered.filter(h => h.quantity > 0);
           const archivedHoldings = filtered.filter(h => h.quantity <= 0);
 
+          const getValueILS = (h: typeof holdings[0]) => {
+            const cp = h.current_price ?? h.average_cost;
+            return convertToILS(h.quantity * cp, h.currency || "ILS");
+          };
+          const getPnlILS = (h: typeof holdings[0]) => {
+            if (!h.current_price) return 0;
+            const cp = h.current_price;
+            return convertToILS(h.quantity * cp - h.quantity * h.average_cost, h.currency || "ILS");
+          };
+          const getPnlPercent = (h: typeof holdings[0]) => {
+            if (!h.current_price) return 0;
+            const cost = h.quantity * h.average_cost;
+            return cost > 0 ? ((h.quantity * h.current_price - cost) / cost) * 100 : 0;
+          };
+
           const sortedActive = [...activeHoldings].sort((a, b) => {
             const getVal = (h: typeof a) => {
               const cp = h.current_price ?? h.average_cost;
@@ -231,11 +246,16 @@ export default function Invest() {
                 case "symbol": return h.symbol;
                 case "name": return h.name;
                 case "type": return h.asset_type;
+                case "category": {
+                  const cats = getCategoriesForHolding(h.id);
+                  return cats.length > 0 ? (cats[0] as any).allocation_categories?.name || "" : "zzz";
+                }
                 case "quantity": return h.quantity;
                 case "avgCost": return h.average_cost;
                 case "price": return cp;
-                case "value": return h.quantity * cp;
-                case "pnl": return h.current_price ? (h.quantity * cp) - (h.quantity * h.average_cost) : 0;
+                case "value": return getValueILS(h);
+                case "pnl": return getPnlILS(h);
+                case "pnlPct": return getPnlPercent(h);
                 default: return h.name;
               }
             };
@@ -243,6 +263,14 @@ export default function Invest() {
             const cmp = typeof va === "string" ? va.localeCompare(vb as string) : (va as number) - (vb as number);
             return sortDir === "asc" ? cmp : -cmp;
           });
+
+          // Category grouped view
+          const categoryGroups = categories.map(cat => {
+            const catHoldingIds = holdingCategories.filter(hc => hc.category_id === cat.id).map(hc => hc.holding_id);
+            return { ...cat, catHoldings: activeHoldings.filter(h => catHoldingIds.includes(h.id)) };
+          }).filter(g => g.catHoldings.length > 0);
+          const categorizedIds = new Set(holdingCategories.map(hc => hc.holding_id));
+          const uncategorizedHoldings = activeHoldings.filter(h => !categorizedIds.has(h.id));
           
           return isLoading ? (
           <Card><CardContent className="py-8"><Skeleton className="h-40 w-full" /></CardContent></Card>
