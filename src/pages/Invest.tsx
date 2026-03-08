@@ -16,9 +16,11 @@ import { useHoldings } from "@/hooks/useHoldings";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { useAllocations } from "@/hooks/useAllocations";
 import { useHoldingCategories } from "@/hooks/useHoldingCategories";
+import { useExchangeRates } from "@/hooks/useExchangeRates";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type AssetType = 'stock' | 'etf' | 'mutual_fund' | 'israeli_fund' | 'bank_savings';
 
