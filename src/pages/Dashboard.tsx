@@ -153,23 +153,28 @@ export default function Dashboard() {
 
   // Dividends by month
   const dividendData = useMemo(() => {
-    const monthMap = new Map<string, number>();
+    const monthMap = new Map<string, { gross: number; tax: number }>();
     dividends.forEach(d => {
       if (d.payment_date) {
         const date = new Date(d.payment_date);
         const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        monthMap.set(key, (monthMap.get(key) || 0) + d.amount);
+        const prev = monthMap.get(key) || { gross: 0, tax: 0 };
+        const amountILS = convertToILS(d.amount, d.currency || 'ILS');
+        const taxILS = convertToILS(d.tax_withheld || 0, d.currency || 'ILS');
+        monthMap.set(key, { gross: prev.gross + amountILS, tax: prev.tax + taxILS });
       }
     });
     return Array.from(monthMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .slice(-12)
-      .map(([month, amount]) => {
+      .map(([month, { gross, tax }]) => {
         const [, m] = month.split('-');
         const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
-        return { month: monthNames[parseInt(m) - 1], amount: Math.round(amount) };
+        const grossConverted = convertFromILS(gross, displayCurrency);
+        const netConverted = convertFromILS(gross - tax, displayCurrency);
+        return { month: monthNames[parseInt(m) - 1], gross: Math.round(grossConverted), net: Math.round(netConverted) };
       });
-  }, [dividends]);
+  }, [dividends, convertToILS, convertFromILS, displayCurrency]);
 
   const handleRefreshPrices = async () => {
     setIsRefreshing(true);
