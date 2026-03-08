@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
+import { useState, useMemo } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { GroupBy } from "./DividendFilters";
 import { getDividendChangeInfo, buildDividendPreviousMap } from "./DividendChangeArrow";
-import { useMemo } from "react";
 
 interface DividendWithHolding {
   id: string;
@@ -79,16 +80,45 @@ interface DividendTableProps {
 }
 
 export function DividendTable({ dividends, groupBy }: DividendTableProps) {
-  const prevMap = useMemo(() => buildDividendPreviousMap(dividends), [dividends]);
+  // Year filter
+  const years = useMemo(() => {
+    const yrs = new Set<number>();
+    dividends.forEach(d => { if (d.payment_date) yrs.add(new Date(d.payment_date).getFullYear()); });
+    return Array.from(yrs).sort((a, b) => b - a);
+  }, [dividends]);
+
+  const [selectedYear, setSelectedYear] = useState<number | "all">(() => years[0] || new Date().getFullYear());
+
+  const filtered = useMemo(() => {
+    if (selectedYear === "all") return dividends;
+    return dividends.filter(d => {
+      if (!d.payment_date) return false;
+      return new Date(d.payment_date).getFullYear() === selectedYear;
+    });
+  }, [dividends, selectedYear]);
+
+  const prevMap = useMemo(() => buildDividendPreviousMap(filtered), [filtered]);
 
   if (dividends.length === 0) {
     return <p className="text-center text-muted-foreground py-8">אין דיבידנדים עדיין</p>;
   }
 
+  const yearSelector = (
+    <div className="flex items-center gap-1 mb-4 flex-wrap">
+      <Button variant={selectedYear === "all" ? "default" : "ghost"} size="sm" onClick={() => setSelectedYear("all")}>הכל</Button>
+      {years.map(y => (
+        <Button key={y} variant={y === selectedYear ? "default" : "ghost"} size="sm" onClick={() => setSelectedYear(y)}>
+          {y}
+        </Button>
+      ))}
+    </div>
+  );
+
   if (groupBy !== "all") {
-    const groups = groupDividends(dividends, groupBy);
+    const groups = groupDividends(filtered, groupBy);
     return (
       <TooltipProvider>
+        {yearSelector}
         <div className="space-y-4">
           {groups.map((g) => (
             <div key={g.label} className="rounded-lg border">
@@ -125,6 +155,7 @@ export function DividendTable({ dividends, groupBy }: DividendTableProps) {
 
   return (
     <TooltipProvider>
+      {yearSelector}
       <Table>
         <TableHeader>
           <TableRow>
@@ -138,7 +169,7 @@ export function DividendTable({ dividends, groupBy }: DividendTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {dividends.map((d) => <DividendRow key={d.id} d={d} prevMap={prevMap} />)}
+          {filtered.map((d) => <DividendRow key={d.id} d={d} prevMap={prevMap} />)}
         </TableBody>
       </Table>
     </TooltipProvider>
