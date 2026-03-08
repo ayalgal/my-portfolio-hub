@@ -1,6 +1,9 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { GroupBy } from "./DividendFilters";
+import { getDividendChangeInfo, buildDividendPreviousMap } from "./DividendChangeArrow";
+import { useMemo } from "react";
 
 interface DividendWithHolding {
   id: string;
@@ -75,6 +78,8 @@ interface DividendTableProps {
 }
 
 export function DividendTable({ dividends, groupBy }: DividendTableProps) {
+  const prevMap = useMemo(() => buildDividendPreviousMap(dividends), [dividends]);
+
   if (dividends.length === 0) {
     return <p className="text-center text-muted-foreground py-8">אין דיבידנדים עדיין</p>;
   }
@@ -82,59 +87,69 @@ export function DividendTable({ dividends, groupBy }: DividendTableProps) {
   if (groupBy !== "all") {
     const groups = groupDividends(dividends, groupBy);
     return (
-      <div className="space-y-4">
-        {groups.map((g) => (
-          <div key={g.label} className="rounded-lg border">
-            <div className="flex items-center justify-between bg-muted/50 px-4 py-2.5 rounded-t-lg">
-              <span className="font-semibold">{g.label}</span>
-              <div className="flex gap-4 text-sm">
-                <span className="text-green-500 font-medium">₪{g.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                <span className="text-muted-foreground">מס: ₪{g.totalTax.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
-                <Badge variant="outline">{g.count} תשלומים</Badge>
+      <TooltipProvider>
+        <div className="space-y-4">
+          {groups.map((g) => (
+            <div key={g.label} className="rounded-lg border">
+              <div className="flex items-center justify-between bg-muted/50 px-4 py-2.5 rounded-t-lg">
+                <span className="font-semibold">{g.label}</span>
+                <div className="flex gap-4 text-sm">
+                  <span className="text-green-500 font-medium">₪{g.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <span className="text-muted-foreground">מס: ₪{g.totalTax.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                  <Badge variant="outline">{g.count} תשלומים</Badge>
+                </div>
               </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">תאריך</TableHead>
+                    <TableHead className="text-right">נייר ערך</TableHead>
+                    <TableHead className="text-right">סכום</TableHead>
+                    <TableHead className="text-right w-10">שינוי</TableHead>
+                    <TableHead className="text-right">מניות</TableHead>
+                    <TableHead className="text-right">מס</TableHead>
+                    <TableHead className="text-right">סוג</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {g.dividends.map((d) => <DividendRow key={d.id} d={d} prevMap={prevMap} />)}
+                </TableBody>
+              </Table>
             </div>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right">תאריך</TableHead>
-                  <TableHead className="text-right">נייר ערך</TableHead>
-                  <TableHead className="text-right">סכום</TableHead>
-                  <TableHead className="text-right">מניות</TableHead>
-                  <TableHead className="text-right">מס</TableHead>
-                  <TableHead className="text-right">סוג</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {g.dividends.map((d) => <DividendRow key={d.id} d={d} />)}
-              </TableBody>
-            </Table>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </TooltipProvider>
     );
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead className="text-right">תאריך</TableHead>
-          <TableHead className="text-right">נייר ערך</TableHead>
-          <TableHead className="text-right">סכום</TableHead>
-          <TableHead className="text-right">מניות</TableHead>
-          <TableHead className="text-right">מס</TableHead>
-          <TableHead className="text-right">סוג</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {dividends.map((d) => <DividendRow key={d.id} d={d} />)}
-      </TableBody>
-    </Table>
+    <TooltipProvider>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead className="text-right">תאריך</TableHead>
+            <TableHead className="text-right">נייר ערך</TableHead>
+            <TableHead className="text-right">סכום</TableHead>
+            <TableHead className="text-right w-10">שינוי</TableHead>
+            <TableHead className="text-right">מניות</TableHead>
+            <TableHead className="text-right">מס</TableHead>
+            <TableHead className="text-right">סוג</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {dividends.map((d) => <DividendRow key={d.id} d={d} prevMap={prevMap} />)}
+        </TableBody>
+      </Table>
+    </TooltipProvider>
   );
 }
 
-function DividendRow({ d }: { d: DividendWithHolding }) {
+function DividendRow({ d, prevMap }: { d: DividendWithHolding; prevMap: Map<string, Map<string, number>> }) {
   const cs = getCurrencySymbol(d.currency || "ILS");
+  const holdingPrevMap = prevMap.get(d.holding_id);
+  const prevAmount = holdingPrevMap?.get(d.payment_date || "") ?? null;
+  const changeInfo = getDividendChangeInfo(d.amount, prevAmount);
+
   return (
     <TableRow>
       <TableCell dir="ltr">{d.payment_date ? new Date(d.payment_date).toLocaleDateString("he-IL") : "-"}</TableCell>
@@ -143,6 +158,18 @@ function DividendRow({ d }: { d: DividendWithHolding }) {
         {d.holdings?.name && <span className="text-xs text-muted-foreground mr-1">({d.holdings.name})</span>}
       </TableCell>
       <TableCell dir="ltr" className="font-semibold text-green-500">{cs}{d.amount.toLocaleString()}</TableCell>
+      <TableCell className="text-center">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex cursor-default">{changeInfo.icon}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top" dir="rtl">
+            {changeInfo.changePercent !== null
+              ? `${changeInfo.changePercent > 0 ? '+' : ''}${changeInfo.changePercent.toFixed(1)}% מהדיבידנד הקודם`
+              : "אין דיבידנד קודם להשוואה"}
+          </TooltipContent>
+        </Tooltip>
+      </TableCell>
       <TableCell dir="ltr">{d.shares_at_payment || "-"}</TableCell>
       <TableCell dir="ltr" className="text-muted-foreground">{cs}{(d.tax_withheld || 0).toFixed(2)}</TableCell>
       <TableCell>
