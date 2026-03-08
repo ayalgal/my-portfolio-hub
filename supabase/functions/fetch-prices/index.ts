@@ -190,6 +190,15 @@ Deno.serve(async (req) => {
     let failed = 0;
     let splitsDetected = 0;
     let dividendsAdded = 0;
+    let eventsCreated = 0;
+
+    // Get existing events to avoid duplicates
+    const { data: existingEvents } = await supabase
+      .from('stock_events')
+      .select('holding_id, event_type, event_date');
+    const existingEventSet = new Set(
+      (existingEvents || []).map(e => `${e.holding_id}_${e.event_type}_${e.event_date}`)
+    );
 
     for (const holding of holdings || []) {
       if (holding.asset_type === 'israeli_fund') continue;
@@ -217,7 +226,7 @@ Deno.serve(async (req) => {
         failed++;
       }
 
-      // Store splits
+      // Store splits + create events
       for (const split of splits) {
         const { data: existingSplit } = await supabase
           .from('stock_splits')
@@ -237,6 +246,27 @@ Deno.serve(async (req) => {
             status: 'pending',
           });
           splitsDetected++;
+
+          // Create event notification
+          const ratio = split.numerator / split.denominator;
+          const eventType = ratio > 1 ? 'split' : 'reverse_split';
+          const eventKey = `${holding.id}_${eventType}_${split.date}`;
+          if (!existingEventSet.has(eventKey)) {
+            const title = ratio > 1
+              ? `ספליט ${split.denominator}:${split.numerator} — ${holding.symbol}`
+              : `איחוד מניות ${split.denominator}:${split.numerator} — ${holding.symbol}`;
+            await supabase.from('stock_events').insert({
+              user_id: holding.user_id,
+              holding_id: holding.id,
+              symbol: holding.symbol,
+              event_type: eventType,
+              title,
+              description: `זוהה אוטומטית. נא לבדוק בדף המניה ולהחליט אם להחיל.`,
+              event_date: split.date,
+            });
+            existingEventSet.add(eventKey);
+            eventsCreated++;
+          }
         }
       }
 
@@ -244,19 +274,30 @@ Deno.serve(async (req) => {
       const holdingTxs = (allTxs || []).filter(t => t.holding_id === holding.id) as Transaction[];
       const firstBuy = earliestBuyDate[holding.id];
 
-      for (const div of dividends) {
+      // Track for dividend change events
+      let lastDivAmount: number | null = null;
+      const sortedDivs = [...dividends].sort((a, b) => a.date.localeCompare(b.date));
+
+      for (const div of sortedDivs) {
         // Skip dividends before user ever owned the holding
-        if (!firstBuy || div.date < firstBuy) continue;
+        if (!firstBuy || div.date < firstBuy) {
+          lastDivAmount = div.amount;
+          continue;
+        }
 
         // Skip if already exists
         const key = `${holding.id}_${div.date}`;
-        if (existingDivSet.has(key)) continue;
+        if (existingDivSet.has(key)) {
+          lastDivAmount = div.amount;
+          continue;
+        }
 
         // Calculate split-adjusted shares at ex-date
         const sharesAtExDate = calcSharesAtDate(holdingTxs, splits, div.date);
 
         if (sharesAtExDate <= 0) {
           console.log(`${holding.symbol}: 0 shares at ex-date ${div.date}, skipping dividend`);
+          lastDivAmount = div.amount;
           continue;
         }
 
@@ -284,9 +325,35 @@ Deno.serve(async (req) => {
         if (!divError) {
           dividendsAdded++;
           existingDivSet.add(key);
+
+          // Create event for significant dividend changes (>15% change)
+          if (lastDivAmount !== null && lastDivAmount > 0) {
+            const changePct = ((div.amount - lastDivAmount) / lastDivAmount) * 100;
+            if (Math.abs(changePct) > 15) {
+              const eventType = changePct > 0 ? 'dividend_increase' : 'dividend_cut';
+              const eventKey = `${holding.id}_${eventType}_${div.date}`;
+              if (!existingEventSet.has(eventKey)) {
+                await supabase.from('stock_events').insert({
+                  user_id: holding.user_id,
+                  holding_id: holding.id,
+                  symbol: holding.symbol,
+                  event_type: eventType,
+                  title: changePct > 0
+                    ? `עליית דיבידנד ${changePct.toFixed(0)}% — ${holding.symbol}`
+                    : `קיצוץ דיבידנד ${changePct.toFixed(0)}% — ${holding.symbol}`,
+                  description: `$${lastDivAmount.toFixed(4)} → $${div.amount.toFixed(4)} למניה`,
+                  event_date: div.date,
+                });
+                existingEventSet.add(eventKey);
+                eventsCreated++;
+              }
+            }
+          }
         } else {
           console.error(`Dividend insert error for ${holding.symbol}:`, divError);
         }
+
+        lastDivAmount = div.amount;
       }
 
       // Rate limit
