@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 type AssetType = 'stock' | 'etf' | 'mutual_fund' | 'israeli_fund';
 
 export default function Invest() {
+  const [selectedAssetType, setSelectedAssetType] = useState("stock");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { portfolios } = usePortfolio();
   const defaultPortfolioId = portfolios?.[0]?.id;
