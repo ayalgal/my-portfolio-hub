@@ -17,7 +17,17 @@ import Export from "./pages/Export";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 10, // 10 minutes - data considered fresh
+      gcTime: 1000 * 60 * 30, // 30 minutes - keep in cache
+      refetchOnWindowFocus: false, // don't refetch when tab regains focus
+      refetchOnReconnect: false, // don't refetch on reconnect
+      retry: 1, // only 1 retry on failure
+    },
+  },
+});
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
