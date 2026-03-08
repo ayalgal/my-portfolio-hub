@@ -138,11 +138,11 @@ export default function Visualize() {
                         <Tooltip 
                           formatter={(value: number, name: string) => [
                             `$${value.toLocaleString()}`, 
-                            name === 'invested' ? 'סכום מושקע' : 'S&P 500 (הערכה)'
+                            name === 'invested' ? 'סכום מושקע' : 'S&P 500'
                           ]}
                           contentStyle={{ direction: 'rtl' }}
                         />
-                        <Legend formatter={(value) => value === 'invested' ? 'סכום מושקע' : 'S&P 500 (10% שנתי)'} />
+                        <Legend formatter={(value) => value === 'invested' ? 'סכום מושקע' : 'S&P 500'} />
                         <Line 
                           type="monotone" 
                           dataKey="invested" 
