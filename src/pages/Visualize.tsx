@@ -1,34 +1,46 @@
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from "recharts";
+import { useHoldings } from "@/hooks/useHoldings";
+import { useDividends } from "@/hooks/useDividends";
+import { Skeleton } from "@/components/ui/skeleton";
 
-// Placeholder data
-const allocationData = [
-  { name: "מניות ארה״ב", value: 40, color: "#3b82f6" },
-  { name: "קרנות כספיות", value: 25, color: "#10b981" },
-  { name: "ETF בינלאומי", value: 20, color: "#f59e0b" },
-  { name: "מניות ישראל", value: 15, color: "#8b5cf6" },
-];
-
-const performanceData = [
-  { month: "ינו", value: 100000 },
-  { month: "פבר", value: 102500 },
-  { month: "מרץ", value: 98000 },
-  { month: "אפר", value: 105000 },
-  { month: "מאי", value: 110000 },
-  { month: "יוני", value: 108500 },
-];
-
-const dividendData = [
-  { month: "ינו", amount: 150 },
-  { month: "פבר", amount: 200 },
-  { month: "מרץ", amount: 180 },
-  { month: "אפר", amount: 320 },
-  { month: "מאי", amount: 250 },
-  { month: "יוני", amount: 280 },
-];
+const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#ec4899", "#84cc16"];
 
 export default function Visualize() {
+  const { holdings, isLoading: holdingsLoading } = useHoldings();
+  const { dividends, isLoading: dividendsLoading } = useDividends();
+  const isLoading = holdingsLoading || dividendsLoading;
+
+  // Allocation by asset type
+  const allocationMap = new Map<string, number>();
+  holdings.forEach(h => {
+    const value = h.quantity * h.average_cost;
+    const label = { stock: "מניות", etf: "ETF", mutual_fund: "קרנות נאמנות", israeli_fund: "קרנות כספיות" }[h.asset_type] || h.asset_type;
+    allocationMap.set(label, (allocationMap.get(label) || 0) + value);
+  });
+  const allocationData = Array.from(allocationMap.entries()).map(([name, value], i) => ({
+    name, value: Math.round(value), color: COLORS[i % COLORS.length],
+  }));
+
+  // Dividends by month
+  const monthMap = new Map<string, number>();
+  dividends.forEach(d => {
+    if (d.payment_date) {
+      const date = new Date(d.payment_date);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      monthMap.set(key, (monthMap.get(key) || 0) + d.amount);
+    }
+  });
+  const dividendData = Array.from(monthMap.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-12)
+    .map(([month, amount]) => {
+      const [y, m] = month.split('-');
+      const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
+      return { month: monthNames[parseInt(m) - 1], amount: Math.round(amount) };
+    });
+
   return (
     <AppLayout>
       <div className="space-y-6">
@@ -37,109 +49,72 @@ export default function Visualize() {
           <p className="text-muted-foreground">גרפים וניתוח הפורטפוליו שלך</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Allocation Pie Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>הקצאת נכסים</CardTitle>
-              <CardDescription>פיזור הפורטפוליו לפי סוג נכס</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={allocationData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={100}
-                      paddingAngle={2}
-                      dataKey="value"
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {allocationData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
+        {isLoading ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card><CardContent className="py-8"><Skeleton className="h-[300px] w-full" /></CardContent></Card>
+            <Card><CardContent className="py-8"><Skeleton className="h-[300px] w-full" /></CardContent></Card>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>הקצאת נכסים</CardTitle>
+                <CardDescription>פיזור הפורטפוליו לפי סוג נכס</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {allocationData.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-12">אין נתונים להצגה</p>
+                ) : (
+                  <>
+                    <div className="h-[300px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie data={allocationData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="value"
+                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                            {allocationData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                          </Pie>
+                          <Tooltip formatter={(value: number) => [`₪${value.toLocaleString()}`, 'שווי']} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="flex flex-wrap justify-center gap-4 mt-4">
+                      {allocationData.map(item => (
+                        <div key={item.name} className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                          <span className="text-sm">{item.name}</span>
+                        </div>
                       ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(value: number) => [`${value}%`, 'הקצאה']}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex flex-wrap justify-center gap-4 mt-4">
-                {allocationData.map((item) => (
-                  <div key={item.name} className="flex items-center gap-2">
-                    <div 
-                      className="w-3 h-3 rounded-full" 
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="text-sm">{item.name}</span>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>דיבידנדים חודשיים</CardTitle>
+                <CardDescription>הכנסות מדיבידנדים לאורך הזמן</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {dividendData.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-12">אין נתונים להצגה</p>
+                ) : (
+                  <div className="h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dividendData}>
+                        <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                        <XAxis dataKey="month" />
+                        <YAxis tickFormatter={(v) => `₪${v}`} />
+                        <Tooltip formatter={(value: number) => [`₪${value.toLocaleString()}`, 'דיבידנד']} />
+                        <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Performance Line Chart */}
-          <Card>
-            <CardHeader>
-              <CardTitle>ביצועים לאורך זמן</CardTitle>
-              <CardDescription>שווי הפורטפוליו ב-6 חודשים אחרונים</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={performanceData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="month" />
-                    <YAxis 
-                      tickFormatter={(value) => `₪${(value / 1000).toFixed(0)}K`}
-                    />
-                    <Tooltip 
-                      formatter={(value: number) => [`₪${value.toLocaleString()}`, 'שווי']}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="value" 
-                      stroke="hsl(var(--primary))" 
-                      strokeWidth={2}
-                      dot={{ fill: "hsl(var(--primary))" }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Dividend Bar Chart */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>דיבידנדים חודשיים</CardTitle>
-              <CardDescription>הכנסות מדיבידנדים לאורך השנה</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dividendData}>
-                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                    <XAxis dataKey="month" />
-                    <YAxis tickFormatter={(value) => `₪${value}`} />
-                    <Tooltip 
-                      formatter={(value: number) => [`₪${value.toLocaleString()}`, 'דיבידנד']}
-                    />
-                    <Bar 
-                      dataKey="amount" 
-                      fill="hsl(var(--primary))" 
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </AppLayout>
   );
