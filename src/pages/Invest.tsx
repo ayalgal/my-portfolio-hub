@@ -190,7 +190,7 @@ export default function Invest() {
           </Dialog>
         </div>
 
-        <SplitAlerts />
+        
 
         {isLoading ? (
           <Card><CardContent className="py-8"><Skeleton className="h-40 w-full" /></CardContent></Card>

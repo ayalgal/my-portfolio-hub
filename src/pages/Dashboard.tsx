@@ -396,9 +396,11 @@ export default function Dashboard() {
                       <BarChart data={dividendData}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis dataKey="month" tick={{ fontSize: 10 }} />
-                        <YAxis tickFormatter={(v) => `$${v}`} tick={{ fontSize: 10 }} />
-                        <Tooltip formatter={(value: number) => [`$${value.toLocaleString()}`, 'דיבידנד']} />
-                        <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                        <YAxis tickFormatter={(v) => `${currencySymbols[displayCurrency]}${v}`} tick={{ fontSize: 10 }} />
+                        <Tooltip formatter={(value: number, name: string) => [`${currencySymbols[displayCurrency]}${value.toLocaleString()}`, name === 'gross' ? 'ברוטו' : 'נטו (אחרי מס)']} contentStyle={{ direction: 'rtl' }} />
+                        <Legend formatter={(value) => value === 'gross' ? 'ברוטו' : 'נטו (אחרי מס)'} />
+                        <Bar dataKey="gross" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="gross" />
+                        <Bar dataKey="net" fill="#22c55e" radius={[4, 4, 0, 0]} name="net" />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
