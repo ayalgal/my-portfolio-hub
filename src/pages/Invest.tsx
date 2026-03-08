@@ -125,6 +125,7 @@ export default function Invest() {
                     <SelectContent>
                       <SelectItem value="ILS">₪ שקל</SelectItem>
                       <SelectItem value="USD">$ דולר</SelectItem>
+                      <SelectItem value="CAD">C$ דולר קנדי</SelectItem>
                       <SelectItem value="EUR">€ אירו</SelectItem>
                     </SelectContent>
                   </Select>
