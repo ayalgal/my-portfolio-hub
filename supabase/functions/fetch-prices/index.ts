@@ -175,10 +175,12 @@ Deno.serve(async (req) => {
       // Store dividends — only for dates when user held the stock
       for (const div of dividends) {
         const divDate = new Date(div.date);
-        const holdingCreated = new Date(holding.created_at || '2099-01-01');
+        const holdingStart = earliestTxDate[holding.id] 
+          ? new Date(earliestTxDate[holding.id])
+          : new Date(holding.created_at || '2099-01-01');
         
-        // Only add dividends after user purchased (use created_at as proxy)
-        if (divDate < holdingCreated) continue;
+        // Only add dividends after user first purchased
+        if (divDate < holdingStart) continue;
 
         // Upsert dividend — use holding_id + payment_date as natural key
         const { data: existing } = await supabase
