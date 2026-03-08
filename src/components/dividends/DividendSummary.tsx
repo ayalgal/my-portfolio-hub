@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CalendarClock } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface DividendWithHolding {
   id: string;
@@ -38,6 +38,8 @@ interface Props {
 }
 
 export function DividendSummary({ dividends, holdingCategories }: Props) {
+  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+
   // Summary per holding
   const holdingSummary = useMemo(() => {
     const map = new Map<string, {
@@ -83,206 +85,209 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
     return Array.from(catMap.values()).sort((a, b) => b.totalGross - a.totalGross);
   }, [dividends, holdingCategories]);
 
-  // Forecast: estimate next dividend per holding, then aggregate monthly
-  const { upcomingEstimates, monthlyForecast, totalEstimatedILS } = useMemo(() => {
-    // Get all dividends per holding sorted by date
-    const divsByHolding = new Map<string, DividendWithHolding[]>();
-    for (const d of dividends) {
-      const arr = divsByHolding.get(d.holding_id) || [];
-      arr.push(d);
-      divsByHolding.set(d.holding_id, arr);
-    }
+  // Available years
+  const years = useMemo(() => {
+    const yrs = new Set<number>();
+    dividends.forEach(d => { if (d.payment_date) yrs.add(new Date(d.payment_date).getFullYear()); });
+    return Array.from(yrs).sort((a, b) => b - a);
+  }, [dividends]);
 
-    const estimates: {
-      holdingId: string; symbol: string; name: string;
-      estimatedAmount: number; estimatedAmountILS: number; currency: string;
-      shares: number; lastPerShare: number;
-      lastPaymentDate: string | null; lastExDate: string | null;
-      estimatedNextPayment: string | null; frequencyMonths: number;
-    }[] = [];
-
-    for (const [holdingId, hDivs] of divsByHolding) {
-      const sorted = [...hDivs].filter(d => d.payment_date).sort((a, b) => a.payment_date!.localeCompare(b.payment_date!));
-      if (sorted.length === 0) continue;
-
-      const last = sorted[sorted.length - 1];
-      if (!last.holdings || !last.shares_at_payment || last.shares_at_payment <= 0) continue;
-
-      const perShare = last.amount / last.shares_at_payment;
-      const currentShares = last.holdings.quantity;
-      if (currentShares <= 0) continue;
-
-      // Estimate frequency from gaps between payments
-      let frequencyMonths = 3; // default quarterly
-      if (sorted.length >= 2) {
-        const gaps: number[] = [];
-        for (let i = 1; i < sorted.length; i++) {
-          const d1 = new Date(sorted[i - 1].payment_date!);
-          const d2 = new Date(sorted[i].payment_date!);
-          const monthDiff = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
-          if (monthDiff > 0 && monthDiff <= 13) gaps.push(monthDiff);
-        }
-        if (gaps.length > 0) {
-          const avgGap = gaps.reduce((s, g) => s + g, 0) / gaps.length;
-          frequencyMonths = Math.round(avgGap);
-          if (frequencyMonths < 1) frequencyMonths = 1;
-        }
-      }
-
-      // Estimate next payment date
-      let estimatedNextPayment: string | null = null;
-      if (last.payment_date) {
-        const lastDate = new Date(last.payment_date);
-        lastDate.setMonth(lastDate.getMonth() + frequencyMonths);
-        estimatedNextPayment = lastDate.toISOString().split("T")[0];
-      }
-
-      const estimatedAmount = perShare * currentShares;
-      estimates.push({
-        holdingId, symbol: last.holdings.symbol, name: last.holdings.name,
-        estimatedAmount, estimatedAmountILS: estimatedAmount * getRate(last.currency),
-        currency: last.currency || "USD", shares: currentShares, lastPerShare: perShare,
-        lastPaymentDate: last.payment_date, lastExDate: last.ex_date || last.payment_date,
-        estimatedNextPayment, frequencyMonths,
-      });
-    }
-
-    estimates.sort((a, b) => {
-      if (a.estimatedNextPayment && b.estimatedNextPayment) return a.estimatedNextPayment.localeCompare(b.estimatedNextPayment);
-      return b.estimatedAmountILS - a.estimatedAmountILS;
-    });
-
-    // Monthly forecast: for each estimate, project 12 months
-    const monthMap = new Map<string, { grossILS: number; taxILS: number; count: number }>();
-    const now = new Date();
-    for (const e of estimates) {
-      if (!e.estimatedNextPayment) continue;
-      let nextDate = new Date(e.estimatedNextPayment);
-      const taxRate = e.currency === "ILS" ? 0.25 : 0.25;
-      for (let i = 0; i < 12; i++) {
-        if (nextDate > new Date(now.getFullYear() + 1, now.getMonth(), 1)) break;
-        if (nextDate >= now) {
-          const key = `${nextDate.getFullYear()}-${String(nextDate.getMonth() + 1).padStart(2, "0")}`;
-          const prev = monthMap.get(key) || { grossILS: 0, taxILS: 0, count: 0 };
-          prev.grossILS += e.estimatedAmountILS;
-          prev.taxILS += e.estimatedAmountILS * taxRate;
-          prev.count++;
-          monthMap.set(key, prev);
-        }
-        nextDate = new Date(nextDate);
-        nextDate.setMonth(nextDate.getMonth() + e.frequencyMonths);
-      }
-    }
-
+  // Monthly history for selected year (real data only)
+  const monthlyHistory = useMemo(() => {
     const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
-    const monthlyForecast = Array.from(monthMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, val]) => {
-        const [y, m] = key.split("-");
-        return { key, label: `${monthNames[parseInt(m) - 1]} ${y}`, ...val, netILS: val.grossILS - val.taxILS };
-      });
+    const result = monthNames.map((name, i) => ({
+      label: `${name} ${selectedYear}`,
+      month: i,
+      grossILS: 0,
+      taxILS: 0,
+      netILS: 0,
+      count: 0,
+      holdings: new Set<string>(),
+    }));
 
-    const totalEstimatedILS = estimates.reduce((s, e) => s + e.estimatedAmountILS, 0);
-    return { upcomingEstimates: estimates, monthlyForecast, totalEstimatedILS };
+    for (const d of dividends) {
+      if (!d.payment_date) continue;
+      const date = new Date(d.payment_date);
+      if (date.getFullYear() !== selectedYear) continue;
+      const monthIdx = date.getMonth();
+      const grossILS = d.amount * getRate(d.currency);
+      const taxILS = (d.tax_withheld || 0) * getRate(d.currency);
+      result[monthIdx].grossILS += grossILS;
+      result[monthIdx].taxILS += taxILS;
+      result[monthIdx].netILS += grossILS - taxILS;
+      result[monthIdx].count++;
+      result[monthIdx].holdings.add(d.holding_id);
+    }
+    return result;
+  }, [dividends, selectedYear]);
+
+  // Previous year same period for comparison
+  const prevYearMonthly = useMemo(() => {
+    const result = Array(12).fill(0).map(() => ({ netILS: 0 }));
+    const prevYear = selectedYear - 1;
+    for (const d of dividends) {
+      if (!d.payment_date) continue;
+      const date = new Date(d.payment_date);
+      if (date.getFullYear() !== prevYear) continue;
+      const grossILS = d.amount * getRate(d.currency);
+      const taxILS = (d.tax_withheld || 0) * getRate(d.currency);
+      result[date.getMonth()].netILS += grossILS - taxILS;
+    }
+    return result;
+  }, [dividends, selectedYear]);
+
+  // Last dividend info per holding (for ex-date and payment date display)
+  const lastDividendPerHolding = useMemo(() => {
+    const map = new Map<string, DividendWithHolding>();
+    for (const d of dividends) {
+      if (!d.payment_date) continue;
+      const existing = map.get(d.holding_id);
+      if (!existing || (d.payment_date > (existing.payment_date || ""))) {
+        map.set(d.holding_id, d);
+      }
+    }
+    return map;
   }, [dividends]);
 
   const getCurrSym = (c: string) => ({ ILS: "₪", USD: "$", EUR: "€", CAD: "C$" }[c] || c);
+  const yearTotal = monthlyHistory.reduce((s, m) => s + m.netILS, 0);
+  const prevYearTotal = prevYearMonthly.reduce((s, m) => s + m.netILS, 0);
+  const yoyChange = prevYearTotal > 0 ? ((yearTotal - prevYearTotal) / prevYearTotal) * 100 : 0;
 
   return (
     <div className="space-y-6">
-      {/* Monthly forecast */}
-      {monthlyForecast.length > 0 && (
-        <Card className="border-primary/30">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CalendarClock className="h-5 w-5 text-primary" />
-              צפי דיבידנדים חודשי
-            </CardTitle>
-            <CardDescription>
-              אומדן לפי תדירות ודיבידנד אחרון × החזקה נוכחית
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-right">חודש</TableHead>
-                  <TableHead className="text-right">מניות</TableHead>
-                  <TableHead className="text-right">ברוטו (₪)</TableHead>
-                  <TableHead className="text-right">מס (₪)</TableHead>
-                  <TableHead className="text-right">נטו (₪)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {monthlyForecast.map((m) => (
-                  <TableRow key={m.key}>
-                    <TableCell className="font-medium">{m.label}</TableCell>
-                    <TableCell>{m.count}</TableCell>
-                    <TableCell dir="ltr" className="text-green-500 font-semibold">₪{m.grossILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                    <TableCell dir="ltr" className="text-muted-foreground">₪{m.taxILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                    <TableCell dir="ltr" className="font-bold">₪{m.netILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                  </TableRow>
-                ))}
-                <TableRow className="border-t-2 font-bold">
-                  <TableCell>סה״כ שנתי</TableCell>
-                  <TableCell></TableCell>
-                  <TableCell dir="ltr" className="text-green-500">₪{monthlyForecast.reduce((s, m) => s + m.grossILS, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                  <TableCell dir="ltr" className="text-muted-foreground">₪{monthlyForecast.reduce((s, m) => s + m.taxILS, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                  <TableCell dir="ltr">₪{monthlyForecast.reduce((s, m) => s + m.netILS, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Per-holding detail forecast */}
+      {/* Monthly history by year */}
       <Card>
-        <CardHeader>
-          <CardTitle>צפי לפי נייר ערך</CardTitle>
-          <CardDescription>תשלום הבא צפוי לפי תדירות היסטורית</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>היסטוריית דיבידנדים חודשית</CardTitle>
+            <CardDescription>
+              נטו אחרי מס — רק דיבידנדים שהיית זכאי להם
+              {prevYearTotal > 0 && (
+                <span className={`mr-2 font-semibold ${yoyChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  ({yoyChange >= 0 ? '+' : ''}{yoyChange.toFixed(1)}% מול {selectedYear - 1})
+                </span>
+              )}
+            </CardDescription>
+          </div>
+          {years.length > 0 && (
+            <div className="flex items-center gap-1">
+              {years.map(y => (
+                <Button key={y} variant={y === selectedYear ? "default" : "ghost"} size="sm" onClick={() => setSelectedYear(y)}>
+                  {y}
+                </Button>
+              ))}
+            </div>
+          )}
         </CardHeader>
         <CardContent>
-          {upcomingEstimates.length === 0 ? (
-            <p className="text-center text-muted-foreground py-4">אין מספיק נתונים לחיזוי</p>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-right">חודש</TableHead>
+                <TableHead className="text-right">מניות</TableHead>
+                <TableHead className="text-right">ברוטו (₪)</TableHead>
+                <TableHead className="text-right">מס (₪)</TableHead>
+                <TableHead className="text-right">נטו (₪)</TableHead>
+                <TableHead className="text-right">מול {selectedYear - 1}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {monthlyHistory.map((m, i) => {
+                const prevNet = prevYearMonthly[i].netILS;
+                const diff = prevNet > 0 ? ((m.netILS - prevNet) / prevNet) * 100 : null;
+                return (
+                  <TableRow key={i} className={m.count === 0 ? 'opacity-40' : ''}>
+                    <TableCell className="font-medium">{m.label}</TableCell>
+                    <TableCell>{m.count > 0 ? m.count : '—'}</TableCell>
+                    <TableCell dir="ltr" className="text-green-500 font-semibold">
+                      {m.grossILS > 0 ? `₪${m.grossILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                    </TableCell>
+                    <TableCell dir="ltr" className="text-muted-foreground">
+                      {m.taxILS > 0 ? `₪${m.taxILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                    </TableCell>
+                    <TableCell dir="ltr" className="font-bold">
+                      {m.netILS > 0 ? `₪${m.netILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                    </TableCell>
+                    <TableCell dir="ltr">
+                      {diff !== null && m.netILS > 0 ? (
+                        <span className={diff >= 0 ? 'text-green-500' : 'text-red-500'}>
+                          {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
+                        </span>
+                      ) : prevNet > 0 && m.netILS === 0 ? (
+                        <span className="text-red-500">-100%</span>
+                      ) : '—'}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              <TableRow className="border-t-2 font-bold">
+                <TableCell>סה״כ {selectedYear}</TableCell>
+                <TableCell>{monthlyHistory.reduce((s, m) => s + m.count, 0)}</TableCell>
+                <TableCell dir="ltr" className="text-green-500">₪{monthlyHistory.reduce((s, m) => s + m.grossILS, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                <TableCell dir="ltr" className="text-muted-foreground">₪{monthlyHistory.reduce((s, m) => s + m.taxILS, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                <TableCell dir="ltr">₪{yearTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                <TableCell dir="ltr">
+                  {prevYearTotal > 0 && (
+                    <span className={yoyChange >= 0 ? 'text-green-500' : 'text-red-500'}>
+                      {yoyChange >= 0 ? '+' : ''}{yoyChange.toFixed(1)}%
+                    </span>
+                  )}
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Last dividend per holding with ex-date and payment date */}
+      <Card>
+        <CardHeader>
+          <CardTitle>דיבידנד אחרון לפי נייר ערך</CardTitle>
+          <CardDescription>תאריך זכאות, תאריך תשלום וסכום אחרון — נתוני אמת בלבד</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {lastDividendPerHolding.size === 0 ? (
+            <p className="text-center text-muted-foreground py-4">אין דיבידנדים</p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-right">נייר ערך</TableHead>
-                  <TableHead className="text-right">תדירות</TableHead>
-                  <TableHead className="text-right">תאריך אחרון</TableHead>
-                  <TableHead className="text-right">תאריך צפוי</TableHead>
+                  <TableHead className="text-right">תאריך זכאות</TableHead>
+                  <TableHead className="text-right">תאריך תשלום</TableHead>
+                  <TableHead className="text-right">סכום ברוטו</TableHead>
+                  <TableHead className="text-right">מס</TableHead>
+                  <TableHead className="text-right">נטו</TableHead>
                   <TableHead className="text-right">מניות</TableHead>
-                  <TableHead className="text-right">צפי סכום</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {upcomingEstimates.map((e) => (
-                  <TableRow key={e.holdingId}>
-                    <TableCell>
-                      <Link to={`/holding/${e.holdingId}`} className="hover:underline font-medium">
-                        {e.symbol} <span className="text-xs text-muted-foreground">({e.name})</span>
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {e.frequencyMonths === 1 ? "חודשי" : e.frequencyMonths === 3 ? "רבעוני" : e.frequencyMonths === 6 ? "חצי שנתי" : e.frequencyMonths === 12 ? "שנתי" : `כל ${e.frequencyMonths} חודשים`}
-                      </Badge>
-                    </TableCell>
-                    <TableCell dir="ltr" className="text-muted-foreground">
-                      {e.lastPaymentDate ? new Date(e.lastPaymentDate).toLocaleDateString("he-IL") : "—"}
-                    </TableCell>
-                    <TableCell dir="ltr" className="font-medium text-primary">
-                      {e.estimatedNextPayment ? new Date(e.estimatedNextPayment).toLocaleDateString("he-IL") : "—"}
-                    </TableCell>
-                    <TableCell dir="ltr">{e.shares.toLocaleString()}</TableCell>
-                    <TableCell dir="ltr" className="font-semibold text-green-500">
-                      {getCurrSym(e.currency)}{e.estimatedAmount.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                      <span className="text-xs text-muted-foreground mr-1">(₪{e.estimatedAmountILS.toLocaleString(undefined, { maximumFractionDigits: 0 })})</span>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {Array.from(lastDividendPerHolding.values())
+                  .sort((a, b) => (b.payment_date || "").localeCompare(a.payment_date || ""))
+                  .map((d) => {
+                    const curr = getCurrSym(d.currency || "ILS");
+                    const net = d.amount - (d.tax_withheld || 0);
+                    return (
+                      <TableRow key={d.holding_id}>
+                        <TableCell>
+                          <Link to={`/holding/${d.holding_id}`} className="hover:underline font-medium">
+                            {d.holdings?.symbol || "?"} <span className="text-xs text-muted-foreground">({d.holdings?.name})</span>
+                          </Link>
+                        </TableCell>
+                        <TableCell dir="ltr" className="text-muted-foreground">
+                          {d.ex_date ? new Date(d.ex_date).toLocaleDateString("he-IL") : "—"}
+                        </TableCell>
+                        <TableCell dir="ltr">
+                          {d.payment_date ? new Date(d.payment_date).toLocaleDateString("he-IL") : "—"}
+                        </TableCell>
+                        <TableCell dir="ltr" className="text-green-500">{curr}{d.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                        <TableCell dir="ltr" className="text-muted-foreground">{curr}{(d.tax_withheld || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                        <TableCell dir="ltr" className="font-semibold">{curr}{net.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                        <TableCell dir="ltr">{d.shares_at_payment?.toLocaleString() || "—"}</TableCell>
+                      </TableRow>
+                    );
+                  })}
               </TableBody>
             </Table>
           )}
