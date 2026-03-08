@@ -130,10 +130,20 @@ function aggregateRows(rows: RawRow[]): AggregatedHolding[] {
       weightedAvgCost = weightedAvgCost / 100;
       currentPrice = currentPrice ? currentPrice / 100 : null;
     }
+
+    return {
+      symbol,
+      name: first.name,
+      currency: first.currency,
+      assetType,
+      fundNumber: assetType === "israeli_fund" ? symbol : null,
+      totalQuantity,
+      weightedAvgCost,
+      currentPrice,
       folder: first.folder,
       buys,
       sells,
-      selected: totalQuantity > 0, // Pre-select only active holdings
+      selected: totalQuantity > 0,
     };
   });
 }
