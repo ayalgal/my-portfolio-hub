@@ -5,11 +5,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-async function fetchYahooData(symbol: string, fromDate?: Date): Promise<{
+interface YahooResult {
   price: number | null;
   splits: { date: string; numerator: number; denominator: number }[];
   dividends: { date: string; amount: number }[];
-}> {
+}
+
+async function fetchYahooData(symbol: string, fromDate?: Date): Promise<YahooResult> {
   try {
     const period1 = fromDate ? Math.floor(fromDate.getTime() / 1000) : Math.floor((Date.now() - 2 * 365 * 86400000) / 1000);
     const period2 = Math.floor(Date.now() / 1000);
@@ -34,7 +36,6 @@ async function fetchYahooData(symbol: string, fromDate?: Date): Promise<{
 
     const price = result?.meta?.regularMarketPrice ?? null;
 
-    // Parse splits
     const splitsRaw = result?.events?.splits;
     const splits = splitsRaw
       ? Object.values(splitsRaw).map((s: any) => ({
@@ -44,7 +45,6 @@ async function fetchYahooData(symbol: string, fromDate?: Date): Promise<{
         }))
       : [];
 
-    // Parse dividends
     const divsRaw = result?.events?.dividends;
     const dividends = divsRaw
       ? Object.values(divsRaw).map((d: any) => ({
@@ -86,6 +86,63 @@ function getYahooSymbol(holding: { symbol: string; asset_type: string; currency:
   return holding.symbol;
 }
 
+interface Transaction {
+  holding_id: string;
+  transaction_type: string;
+  quantity: number;
+  transaction_date: string;
+  split_ratio_from: number | null;
+  split_ratio_to: number | null;
+}
+
+/**
+ * Calculate the number of shares held on a given date,
+ * accounting for buy/sell transactions AND stock splits.
+ * 
+ * Yahoo reports dividends per CURRENT (post-split) share.
+ * So we need the split-adjusted quantity at the ex-date.
+ */
+function calcSharesAtDate(
+  holdingTxs: Transaction[],
+  splits: { date: string; numerator: number; denominator: number }[],
+  targetDate: string,
+): number {
+  // Sort transactions by date
+  const sorted = holdingTxs
+    .filter(t => t.transaction_date <= targetDate)
+    .sort((a, b) => a.transaction_date.localeCompare(b.transaction_date));
+
+  // Get all splits up to targetDate, sorted
+  const relevantSplits = splits
+    .filter(s => s.date <= targetDate)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Walk through time: process transactions and splits in order
+  let qty = 0;
+  let txIdx = 0;
+  let splitIdx = 0;
+
+  // Merge events by date
+  while (txIdx < sorted.length || splitIdx < relevantSplits.length) {
+    const txDate = txIdx < sorted.length ? sorted[txIdx].transaction_date : '9999-12-31';
+    const splitDate = splitIdx < relevantSplits.length ? relevantSplits[splitIdx].date : '9999-12-31';
+
+    if (txDate <= splitDate) {
+      const tx = sorted[txIdx];
+      if (tx.transaction_type === 'buy') qty += tx.quantity;
+      else if (tx.transaction_type === 'sell') qty -= tx.quantity;
+      txIdx++;
+    } else {
+      // Apply split: multiply existing qty by split ratio
+      const split = relevantSplits[splitIdx];
+      qty = qty * (split.numerator / split.denominator);
+      splitIdx++;
+    }
+  }
+
+  return Math.max(0, qty);
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -104,37 +161,30 @@ Deno.serve(async (req) => {
     if (holdingsError) throw holdingsError;
     console.log(`Processing ${holdings?.length || 0} holdings`);
 
-    // Get earliest transaction date per holding
-    const { data: txDates } = await supabase
-      .from('transactions')
-      .select('holding_id, transaction_date')
-      .eq('transaction_type', 'buy')
-      .order('transaction_date', { ascending: true });
-
-    const earliestTxDate: Record<string, string> = {};
-    for (const tx of txDates || []) {
-      if (!earliestTxDate[tx.holding_id] || tx.transaction_date < earliestTxDate[tx.holding_id]) {
-        earliestTxDate[tx.holding_id] = tx.transaction_date;
-      }
-    }
-
-    // Get quantity at each dividend date from transactions
-    function getQuantityAtDate(holdingId: string, date: string): number {
-      const txs = (txDates || []).filter(t => t.holding_id === holdingId);
-      // For now use all buy txs before date
-      let qty = 0;
-      for (const tx of allTxs.filter(t => t.holding_id === holdingId && t.transaction_date <= date)) {
-        if (tx.transaction_type === 'buy') qty += tx.quantity;
-        else if (tx.transaction_type === 'sell') qty -= tx.quantity;
-      }
-      return qty > 0 ? qty : 0;
-    }
-
-    // Get ALL transactions for quantity-at-date calculation
+    // Get ALL transactions for quantity-at-date calculations
     const { data: allTxs } = await supabase
       .from('transactions')
-      .select('holding_id, transaction_type, quantity, transaction_date')
+      .select('holding_id, transaction_type, quantity, transaction_date, split_ratio_from, split_ratio_to')
       .order('transaction_date', { ascending: true });
+
+    // Build earliest buy date per holding
+    const earliestBuyDate: Record<string, string> = {};
+    for (const tx of allTxs || []) {
+      if (tx.transaction_type === 'buy') {
+        if (!earliestBuyDate[tx.holding_id] || tx.transaction_date < earliestBuyDate[tx.holding_id]) {
+          earliestBuyDate[tx.holding_id] = tx.transaction_date;
+        }
+      }
+    }
+
+    // Get existing dividends to avoid duplicates
+    const { data: existingDividends } = await supabase
+      .from('dividends')
+      .select('holding_id, payment_date');
+    
+    const existingDivSet = new Set(
+      (existingDividends || []).map(d => `${d.holding_id}_${d.payment_date}`)
+    );
 
     let updated = 0;
     let failed = 0;
@@ -146,14 +196,13 @@ Deno.serve(async (req) => {
 
       const yahooSymbol = getYahooSymbol(holding);
 
-      // Get events from earliest transaction minus 1 month buffer
-      const earliestDate = earliestTxDate[holding.id]
-        ? new Date(earliestTxDate[holding.id])
+      // Fetch from earliest buy minus 1 month
+      const earliest = earliestBuyDate[holding.id]
+        ? new Date(earliestBuyDate[holding.id])
         : new Date(holding.created_at || '2020-01-01');
-      const eventsFrom = new Date(earliestDate);
+      const eventsFrom = new Date(earliest);
       eventsFrom.setMonth(eventsFrom.getMonth() - 1);
 
-      // Single API call per holding: price + splits + dividends
       const { price, splits, dividends } = await fetchYahooData(yahooSymbol, eventsFrom);
 
       // Update price
@@ -191,59 +240,56 @@ Deno.serve(async (req) => {
         }
       }
 
-      // Store dividends
+      // Store dividends — only if user held shares on ex-date
+      const holdingTxs = (allTxs || []).filter(t => t.holding_id === holding.id) as Transaction[];
+      const firstBuy = earliestBuyDate[holding.id];
+
       for (const div of dividends) {
-        const holdingStart = earliestTxDate[holding.id]
-          ? new Date(earliestTxDate[holding.id])
-          : null;
+        // Skip dividends before user ever owned the holding
+        if (!firstBuy || div.date < firstBuy) continue;
 
-        // Only add dividends after user first purchased
-        if (!holdingStart || new Date(div.date) < holdingStart) continue;
+        // Skip if already exists
+        const key = `${holding.id}_${div.date}`;
+        if (existingDivSet.has(key)) continue;
 
-        // Check if already exists
-        const { data: existing } = await supabase
+        // Calculate split-adjusted shares at ex-date
+        const sharesAtExDate = calcSharesAtDate(holdingTxs, splits, div.date);
+
+        if (sharesAtExDate <= 0) {
+          console.log(`${holding.symbol}: 0 shares at ex-date ${div.date}, skipping dividend`);
+          continue;
+        }
+
+        // Yahoo dividend amount is per share (post-split adjusted)
+        const totalAmount = div.amount * sharesAtExDate;
+        const taxRate = holding.currency === 'USD' ? 0.25 : 0.15;
+
+        console.log(`Adding dividend: ${holding.symbol} ${div.date}, $${div.amount}/share × ${sharesAtExDate} shares = $${totalAmount.toFixed(2)}`);
+
+        const { error: divError } = await supabase
           .from('dividends')
-          .select('id')
-          .eq('holding_id', holding.id)
-          .eq('payment_date', div.date)
-          .maybeSingle();
+          .insert({
+            holding_id: holding.id,
+            user_id: holding.user_id,
+            amount: totalAmount,
+            currency: holding.currency || 'USD',
+            payment_date: div.date,
+            ex_date: div.date,
+            shares_at_payment: sharesAtExDate,
+            is_israeli: holding.currency === 'ILS',
+            tax_withheld: totalAmount * taxRate,
+            notes: `דיבידנד $${div.amount}/מניה — יובא אוטומטית`,
+          });
 
-        if (!existing) {
-          // Calculate shares held at dividend date from transactions
-          const qtyAtDate = (() => {
-            let qty = 0;
-            for (const tx of (allTxs || []).filter(t => t.holding_id === holding.id && t.transaction_date <= div.date)) {
-              if (tx.transaction_type === 'buy') qty += tx.quantity;
-              else if (tx.transaction_type === 'sell') qty -= tx.quantity;
-            }
-            return qty > 0 ? qty : holding.quantity;
-          })();
-
-          const totalAmount = div.amount * qtyAtDate;
-          const taxRate = holding.currency === 'USD' ? 0.25 : 0.15;
-          
-          console.log(`Adding dividend for ${holding.symbol}: ${div.date}, $${div.amount}/share × ${qtyAtDate} shares = $${totalAmount.toFixed(2)}`);
-          
-          const { error: divError } = await supabase
-            .from('dividends')
-            .insert({
-              holding_id: holding.id,
-              user_id: holding.user_id,
-              amount: totalAmount,
-              currency: holding.currency || 'USD',
-              payment_date: div.date,
-              ex_date: div.date,
-              shares_at_payment: qtyAtDate,
-              is_israeli: holding.currency === 'ILS',
-              tax_withheld: totalAmount * taxRate,
-              notes: `דיבידנד $${div.amount}/מניה — יובא אוטומטית`,
-            });
-          if (!divError) dividendsAdded++;
-          else console.error(`Dividend insert error for ${holding.symbol}:`, divError);
+        if (!divError) {
+          dividendsAdded++;
+          existingDivSet.add(key);
+        } else {
+          console.error(`Dividend insert error for ${holding.symbol}:`, divError);
         }
       }
 
-      // Rate limit - shorter delay since we do 1 call per holding now
+      // Rate limit
       await new Promise(r => setTimeout(r, 150));
     }
 
