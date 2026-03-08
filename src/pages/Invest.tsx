@@ -451,11 +451,14 @@ export default function Invest() {
                             : <span className="text-muted-foreground">—</span>
                           }
                         </TableCell>
-                        <TableCell dir="ltr" className="font-semibold">{currencySymbol}{totalValue.toLocaleString()}</TableCell>
-                        <TableCell dir="ltr" className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
+                        <TableCell dir="ltr" className="font-semibold">₪{valueILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                        <TableCell dir="ltr" className={pnlILS >= 0 ? 'text-green-500' : 'text-red-500'}>
                           {holding.current_price ? (
-                            <>{pnl >= 0 ? '+' : ''}{currencySymbol}{pnl.toLocaleString(undefined, {maximumFractionDigits: 0})} ({pnlPercent.toFixed(1)}%)</>
+                            <>{pnlILS >= 0 ? '+' : ''}₪{pnlILS.toLocaleString(undefined, {maximumFractionDigits: 0})}</>
                           ) : '—'}
+                        </TableCell>
+                        <TableCell dir="ltr" className={pnlPercent >= 0 ? 'text-green-500' : 'text-red-500'}>
+                          {holding.current_price ? `${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(1)}%` : '—'}
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
