@@ -289,7 +289,6 @@ export default function Invest() {
           <>
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <CardTitle>ניירות ערך ({activeHoldings.length})</CardTitle>
