@@ -122,17 +122,14 @@ function aggregateRows(rows: RawRow[]): AggregatedHolding[] {
     const activeBuys = symbolRows.filter(r => !r.sellDate || !r.sellPrice);
     const totalQuantity = activeBuys.reduce((sum, r) => sum + r.shareCount, 0);
     const totalCost = activeBuys.reduce((sum, r) => sum + r.shareCount * r.purchasePrice, 0);
-    const weightedAvgCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+    let weightedAvgCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+    let currentPrice = first.currentPrice;
 
-    return {
-      symbol,
-      name: first.name,
-      currency: first.currency,
-      assetType,
-      fundNumber: assetType === "israeli_fund" ? symbol : null,
-      totalQuantity,
-      weightedAvgCost,
-      currentPrice: first.currentPrice,
+    // Israeli funds are priced in agorot (1/100 of ILS) — convert to ILS
+    if (assetType === "israeli_fund") {
+      weightedAvgCost = weightedAvgCost / 100;
+      currentPrice = currentPrice ? currentPrice / 100 : null;
+    }
       folder: first.folder,
       buys,
       sells,
