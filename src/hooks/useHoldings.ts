@@ -48,9 +48,8 @@ export function useHoldings(portfolioId?: string) {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["holdings"] });
-      toast({ title: "נוסף בהצלחה", description: "נייר הערך נוסף לפורטפוליו" });
     },
     onError: () => {
       toast({ variant: "destructive", title: "שגיאה", description: "לא ניתן להוסיף נייר ערך" });
