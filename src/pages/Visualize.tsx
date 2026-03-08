@@ -5,6 +5,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 import { useHoldings } from "@/hooks/useHoldings";
 import { useDividends } from "@/hooks/useDividends";
 import { useTransactions } from "@/hooks/useTransactions";
+import { useSP500Data, calcSP500Comparison } from "@/hooks/useSP500Data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -47,84 +48,48 @@ export default function Visualize() {
       return { month: monthNames[parseInt(m) - 1], amount: Math.round(amount) };
     });
 
-  // Performance over time: calculate cumulative invested amount per month
-  const performanceData = useMemo(() => {
+  // Performance over time
+  const investmentMonthlyData = useMemo(() => {
     if (!transactions || transactions.length === 0) return [];
-
-    // Sort transactions by date
     const sorted = [...transactions].sort((a, b) => 
       new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime()
     );
-
     const firstDate = new Date(sorted[0].transaction_date);
     const now = new Date();
-    
-    // Group by month: cumulative investment
     const monthlyData: { date: string; invested: number; label: string }[] = [];
     let cumInvested = 0;
-
-    // Create month buckets
     const current = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
     while (current <= now) {
-      const key = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
-      
-      // Sum transactions in this month
       const monthTxs = sorted.filter(tx => {
         const txDate = new Date(tx.transaction_date);
         return txDate.getFullYear() === current.getFullYear() && txDate.getMonth() === current.getMonth();
       });
-
       for (const tx of monthTxs) {
-        if (tx.transaction_type === 'buy') {
-          cumInvested += tx.total_amount;
-        } else if (tx.transaction_type === 'sell') {
-          cumInvested -= tx.total_amount;
-        }
+        if (tx.transaction_type === 'buy') cumInvested += tx.total_amount;
+        else if (tx.transaction_type === 'sell') cumInvested -= tx.total_amount;
       }
-
       const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
       monthlyData.push({
-        date: key,
+        date: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`,
         invested: Math.round(cumInvested),
         label: `${monthNames[current.getMonth()]} ${current.getFullYear().toString().slice(2)}`,
       });
-
       current.setMonth(current.getMonth() + 1);
     }
+    return monthlyData;
+  }, [transactions]);
 
-    // Add current portfolio value to last entry
-    if (monthlyData.length > 0) {
-      const totalCurrentValue = holdings.reduce((sum, h) => {
-        const price = h.current_price ?? h.average_cost;
-        return sum + h.quantity * price;
-      }, 0);
-      monthlyData[monthlyData.length - 1] = {
-        ...monthlyData[monthlyData.length - 1],
-        invested: monthlyData[monthlyData.length - 1].invested,
-      };
-    }
+  const firstTxDate = transactions?.length ? [...transactions].sort((a, b) => a.transaction_date.localeCompare(b.transaction_date))[0]?.transaction_date : undefined;
+  const { data: sp500Data } = useSP500Data(firstTxDate);
 
-    // Calculate S&P 500 relative performance (normalized to first investment)
-    // Using approximate monthly returns for S&P 500 as baseline
-    // We normalize: if user invested $X in month 0, S&P would have grown at ~10% annual
-    if (monthlyData.length > 1) {
-      const monthlyReturn = Math.pow(1.10, 1/12); // ~10% annual
-      let sp500Value = monthlyData[0].invested;
-      
-      return monthlyData.map((d, i) => {
-        if (i === 0) {
-          return { ...d, sp500: d.invested };
-        }
-        // S&P grows the existing value + new investments get added at current value
-        const prevData = monthlyData[i - 1];
-        const newInvestment = d.invested - prevData.invested;
-        sp500Value = sp500Value * monthlyReturn + newInvestment;
-        return { ...d, sp500: Math.round(sp500Value) };
-      });
-    }
-
-    return monthlyData.map(d => ({ ...d, sp500: d.invested }));
-  }, [transactions, holdings]);
+  const performanceData = useMemo(() => {
+    if (investmentMonthlyData.length === 0) return [];
+    const sp500Values = calcSP500Comparison(investmentMonthlyData, sp500Data || []);
+    return investmentMonthlyData.map((d, i) => ({
+      ...d,
+      sp500: sp500Values[i],
+    }));
+  }, [investmentMonthlyData, sp500Data]);
 
   return (
     <AppLayout>
@@ -149,7 +114,7 @@ export default function Visualize() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>ביצועי הפורטפוליו לאורך זמן</CardTitle>
-                  <CardDescription>סכום מושקע מצטבר לעומת S&P 500</CardDescription>
+                  <CardDescription>סכום מושקע מצטבר לעומת S&P 500 (נתוני אמת)</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch id="sp500-toggle" checked={showSP500} onCheckedChange={setShowSP500} />
@@ -173,11 +138,11 @@ export default function Visualize() {
                         <Tooltip 
                           formatter={(value: number, name: string) => [
                             `$${value.toLocaleString()}`, 
-                            name === 'invested' ? 'סכום מושקע' : 'S&P 500 (הערכה)'
+                            name === 'invested' ? 'סכום מושקע' : 'S&P 500'
                           ]}
                           contentStyle={{ direction: 'rtl' }}
                         />
-                        <Legend formatter={(value) => value === 'invested' ? 'סכום מושקע' : 'S&P 500 (10% שנתי)'} />
+                        <Legend formatter={(value) => value === 'invested' ? 'סכום מושקע' : 'S&P 500'} />
                         <Line 
                           type="monotone" 
                           dataKey="invested" 

@@ -15,6 +15,7 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
+import { useSP500Data, calcSP500Comparison } from "@/hooks/useSP500Data";
 import { useToast } from "@/hooks/use-toast";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, BarChart, Bar } from "recharts";
 import { Label } from "@/components/ui/label";
@@ -41,6 +42,7 @@ export default function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [showSP500, setShowSP500] = useState(true);
+  const [selectedDivYear, setSelectedDivYear] = useState<number>(new Date().getFullYear());
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -100,7 +102,7 @@ export default function Dashboard() {
   }));
 
   // Performance chart data
-  const performanceData = useMemo(() => {
+  const investmentMonthlyData = useMemo(() => {
     if (!transactions || transactions.length === 0) return [];
 
     const sorted = [...transactions].sort((a, b) =>
@@ -109,8 +111,7 @@ export default function Dashboard() {
 
     const firstDate = new Date(sorted[0].transaction_date);
     const now = new Date();
-
-    const monthlyData: { date: string; invested: number; label: string; sp500?: number }[] = [];
+    const monthlyData: { date: string; invested: number; label: string }[] = [];
     let cumInvested = 0;
 
     const current = new Date(firstDate.getFullYear(), firstDate.getMonth(), 1);
@@ -119,62 +120,67 @@ export default function Dashboard() {
         const txDate = new Date(tx.transaction_date);
         return txDate.getFullYear() === current.getFullYear() && txDate.getMonth() === current.getMonth();
       });
-
       for (const tx of monthTxs) {
         if (tx.transaction_type === 'buy') cumInvested += tx.total_amount;
         else if (tx.transaction_type === 'sell') cumInvested -= tx.total_amount;
       }
-
       const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
       monthlyData.push({
         date: `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`,
         invested: Math.round(cumInvested),
         label: `${monthNames[current.getMonth()]} ${current.getFullYear().toString().slice(2)}`,
       });
-
       current.setMonth(current.getMonth() + 1);
     }
-
-    if (monthlyData.length > 1) {
-      const monthlyReturn = Math.pow(1.10, 1 / 12);
-      let sp500Value = monthlyData[0].invested;
-
-      return monthlyData.map((d, i) => {
-        if (i === 0) return { ...d, sp500: d.invested };
-        const prevData = monthlyData[i - 1];
-        const newInvestment = d.invested - prevData.invested;
-        sp500Value = sp500Value * monthlyReturn + newInvestment;
-        return { ...d, sp500: Math.round(sp500Value) };
-      });
-    }
-
-    return monthlyData.map(d => ({ ...d, sp500: d.invested }));
+    return monthlyData;
   }, [transactions]);
 
-  // Dividends by month
+  const firstTxDate = transactions?.length ? [...transactions].sort((a, b) => a.transaction_date.localeCompare(b.transaction_date))[0]?.transaction_date : undefined;
+  const { data: sp500Data } = useSP500Data(firstTxDate);
+
+  const performanceData = useMemo(() => {
+    if (investmentMonthlyData.length === 0) return [];
+    const sp500Values = calcSP500Comparison(investmentMonthlyData, sp500Data || []);
+    return investmentMonthlyData.map((d, i) => ({
+      ...d,
+      sp500: sp500Values[i],
+    }));
+  }, [investmentMonthlyData, sp500Data]);
+
+  // Available years for dividends
+  const dividendYears = useMemo(() => {
+    const years = new Set<number>();
+    dividends.forEach(d => {
+      if (d.payment_date) years.add(new Date(d.payment_date).getFullYear());
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [dividends]);
+
+  // Dividends by month for selected year
   const dividendData = useMemo(() => {
-    const monthMap = new Map<string, { gross: number; tax: number }>();
+    const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
+    // Initialize all 12 months
+    const result = monthNames.map((name, i) => ({
+      month: name,
+      monthKey: `${selectedDivYear}-${String(i + 1).padStart(2, '0')}`,
+      gross: 0,
+      net: 0,
+    }));
     dividends.forEach(d => {
       if (d.payment_date) {
         const date = new Date(d.payment_date);
-        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        const prev = monthMap.get(key) || { gross: 0, tax: 0 };
+        if (date.getFullYear() !== selectedDivYear) return;
+        const monthIdx = date.getMonth();
         const amountILS = convertToILS(d.amount, d.currency || 'ILS');
         const taxILS = convertToILS(d.tax_withheld || 0, d.currency || 'ILS');
-        monthMap.set(key, { gross: prev.gross + amountILS, tax: prev.tax + taxILS });
+        const grossC = convertFromILS(amountILS, displayCurrency);
+        const netC = convertFromILS(amountILS - taxILS, displayCurrency);
+        result[monthIdx].gross += grossC;
+        result[monthIdx].net += netC;
       }
     });
-    return Array.from(monthMap.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-12)
-      .map(([month, { gross, tax }]) => {
-        const [, m] = month.split('-');
-        const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
-        const grossConverted = convertFromILS(gross, displayCurrency);
-        const netConverted = convertFromILS(gross - tax, displayCurrency);
-        return { month: monthNames[parseInt(m) - 1], gross: Math.round(grossConverted), net: Math.round(netConverted) };
-      });
-  }, [dividends, convertToILS, convertFromILS, displayCurrency]);
+    return result.map(r => ({ ...r, gross: Math.round(r.gross), net: Math.round(r.net) }));
+  }, [dividends, convertToILS, convertFromILS, displayCurrency, selectedDivYear]);
 
   const handleRefreshPrices = async () => {
     setIsRefreshing(true);
@@ -371,7 +377,7 @@ export default function Dashboard() {
                         <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={Math.max(0, Math.floor(performanceData.length / 6))} />
                         <YAxis tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
                         <Tooltip formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name === 'invested' ? 'מושקע' : 'S&P 500']} contentStyle={{ direction: 'rtl' }} />
-                        <Legend formatter={(value) => value === 'invested' ? 'מושקע' : 'S&P 500 (10%)'} />
+                        <Legend formatter={(value) => value === 'invested' ? 'מושקע' : 'S&P 500'} />
                         <Line type="monotone" dataKey="invested" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} name="invested" />
                         {showSP500 && <Line type="monotone" dataKey="sp500" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" dot={false} name="sp500" />}
                       </LineChart>
@@ -383,17 +389,32 @@ export default function Dashboard() {
 
             {/* Dividends Chart */}
             <Card>
-              <CardHeader>
-                <CardTitle>דיבידנדים חודשיים</CardTitle>
-                <CardDescription>הכנסות מדיבידנדים</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>דיבידנדים חודשיים</CardTitle>
+                  <CardDescription>הכנסות מדיבידנדים — לחץ על חודש לפירוט</CardDescription>
+                </div>
+                {dividendYears.length > 1 && (
+                  <div className="flex items-center gap-1">
+                    {dividendYears.map(y => (
+                      <Button key={y} variant={y === selectedDivYear ? "default" : "ghost"} size="sm" onClick={() => setSelectedDivYear(y)}>
+                        {y}
+                      </Button>
+                    ))}
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
-                {dividendData.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-12">אין דיבידנדים — לחץ ↻ לעדכון</p>
+                {dividendData.every(d => d.gross === 0) ? (
+                  <p className="text-center text-muted-foreground py-12">אין דיבידנדים ב-{selectedDivYear} — לחץ ↻ לעדכון</p>
                 ) : (
                   <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={dividendData}>
+                      <BarChart data={dividendData} onClick={(data) => {
+                        if (data?.activePayload?.[0]?.payload?.monthKey) {
+                          navigate(`/dividends?month=${data.activePayload[0].payload.monthKey}`);
+                        }
+                      }} style={{ cursor: 'pointer' }}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                         <YAxis tickFormatter={(v) => `${currencySymbols[displayCurrency]}${v}`} tick={{ fontSize: 10 }} />
