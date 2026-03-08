@@ -101,6 +101,7 @@ export default function Invest() {
       etf: "ETF",
       mutual_fund: "קרן נאמנות",
       israeli_fund: "קרן כספית",
+      bank_savings: "חיסכון בנקאי",
     };
     return labels[type] || type;
   };
