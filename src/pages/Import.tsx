@@ -296,6 +296,16 @@ export default function Import() {
     let success = 0;
     let failed = 0;
 
+    // Pre-fetch existing categories to avoid duplicates
+    const { data: existingCats } = await supabase
+      .from("allocation_categories")
+      .select("*")
+      .eq("user_id", user!.id);
+    const categoryCache: Record<string, string> = {};
+    for (const cat of existingCats || []) {
+      categoryCache[cat.name] = cat.id;
+    }
+
     for (const holding of selected) {
       try {
         const result = await createHolding.mutateAsync({
