@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 type AssetType = 'stock' | 'etf' | 'mutual_fund' | 'israeli_fund';
 
 export default function Invest() {
+  const [selectedAssetType, setSelectedAssetType] = useState("stock");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { portfolios } = usePortfolio();
   const defaultPortfolioId = portfolios?.[0]?.id;
@@ -27,14 +28,16 @@ export default function Invest() {
     
     const formData = new FormData(e.currentTarget);
     
+    const fundNumber = formData.get("fundNumber") as string;
     createHolding.mutate({
-      symbol: formData.get("symbol") as string,
+      symbol: fundNumber || (formData.get("symbol") as string),
       name: formData.get("name") as string,
-      asset_type: formData.get("assetType") as string || "stock",
+      asset_type: selectedAssetType || "stock",
       quantity: parseFloat(formData.get("quantity") as string) || 0,
       average_cost: parseFloat(formData.get("averageCost") as string) || 0,
       currency: formData.get("currency") as string || "ILS",
       portfolio_id: defaultPortfolioId,
+      fund_number: fundNumber || null,
     }, {
       onSuccess: () => setIsDialogOpen(false),
     });
@@ -51,7 +54,7 @@ export default function Invest() {
   };
 
   const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { ILS: "₪", USD: "$", EUR: "€" };
+    const symbols: Record<string, string> = { ILS: "₪", USD: "$", CAD: "C$", EUR: "€" };
     return symbols[currency || "ILS"] || currency;
   };
 
@@ -76,12 +79,8 @@ export default function Invest() {
               <form onSubmit={handleAddHolding} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="symbol">סימול</Label>
-                    <Input id="symbol" name="symbol" placeholder="AAPL" required dir="ltr" />
-                  </div>
-                  <div className="space-y-2">
                     <Label htmlFor="assetType">סוג נכס</Label>
-                    <Select name="assetType" defaultValue="stock">
+                    <Select name="assetType" defaultValue="stock" onValueChange={setSelectedAssetType}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="stock">מניה</SelectItem>
@@ -90,6 +89,19 @@ export default function Invest() {
                         <SelectItem value="israeli_fund">קרן כספית ישראלית</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                    {selectedAssetType === 'israeli_fund' ? (
+                      <>
+                        <Label htmlFor="fundNumber">מספר קרן (7 ספרות)</Label>
+                        <Input id="fundNumber" name="fundNumber" placeholder="5131377" required dir="ltr" maxLength={7} />
+                      </>
+                    ) : (
+                      <>
+                        <Label htmlFor="symbol">סימול</Label>
+                        <Input id="symbol" name="symbol" placeholder="AAPL" required dir="ltr" />
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -113,6 +125,7 @@ export default function Invest() {
                     <SelectContent>
                       <SelectItem value="ILS">₪ שקל</SelectItem>
                       <SelectItem value="USD">$ דולר</SelectItem>
+                      <SelectItem value="CAD">C$ דולר קנדי</SelectItem>
                       <SelectItem value="EUR">€ אירו</SelectItem>
                     </SelectContent>
                   </Select>
@@ -153,22 +166,41 @@ export default function Invest() {
                     <TableHead className="text-right">סוג</TableHead>
                     <TableHead className="text-right">כמות</TableHead>
                     <TableHead className="text-right">עלות ממוצעת</TableHead>
+                    <TableHead className="text-right">מחיר נוכחי</TableHead>
                     <TableHead className="text-right">שווי כולל</TableHead>
+                    <TableHead className="text-right">רווח/הפסד</TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {holdings.map((holding) => {
-                    const totalValue = holding.quantity * holding.average_cost;
+                    const currentPrice = holding.current_price ?? holding.average_cost;
+                    const totalValue = holding.quantity * currentPrice;
+                    const totalCost = holding.quantity * holding.average_cost;
+                    const pnl = totalValue - totalCost;
+                    const pnlPercent = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
                     const currencySymbol = getCurrencySymbol(holding.currency || "ILS");
                     return (
                       <TableRow key={holding.id}>
-                        <TableCell className="font-medium" dir="ltr">{holding.symbol}</TableCell>
+                        <TableCell className="font-medium" dir="ltr">
+                          {holding.fund_number || holding.symbol}
+                        </TableCell>
                         <TableCell>{holding.name}</TableCell>
                         <TableCell>{getAssetTypeLabel(holding.asset_type)}</TableCell>
                         <TableCell dir="ltr">{holding.quantity.toLocaleString()}</TableCell>
                         <TableCell dir="ltr">{currencySymbol}{holding.average_cost.toLocaleString()}</TableCell>
+                        <TableCell dir="ltr">
+                          {holding.current_price 
+                            ? `${currencySymbol}${holding.current_price.toLocaleString()}`
+                            : <span className="text-muted-foreground">—</span>
+                          }
+                        </TableCell>
                         <TableCell dir="ltr" className="font-semibold">{currencySymbol}{totalValue.toLocaleString()}</TableCell>
+                        <TableCell dir="ltr" className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
+                          {holding.current_price ? (
+                            <>{pnl >= 0 ? '+' : ''}{currencySymbol}{pnl.toLocaleString(undefined, {maximumFractionDigits: 0})} ({pnlPercent.toFixed(1)}%)</>
+                          ) : '—'}
+                        </TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
