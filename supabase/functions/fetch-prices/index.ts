@@ -378,10 +378,10 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Done: ${updated} updated, ${failed} failed, ${splitsDetected} splits, ${dividendsAdded} dividends`);
+    console.log(`Done: ${updated} updated, ${failed} failed, ${splitsDetected} splits, ${dividendsAdded} dividends, ${eventsCreated} events`);
 
     return new Response(
-      JSON.stringify({ success: true, updated, failed, splitsDetected, dividendsAdded, rates_updated: !!rates }),
+      JSON.stringify({ success: true, updated, failed, splitsDetected, dividendsAdded, eventsCreated, rates_updated: !!rates }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
