@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, TrendingDown, Wallet, PieChart as PieChartIcon, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw, ChevronDown, ChevronUp, ExternalLink, Trash2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, PieChart as PieChartIcon, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useHoldings } from "@/hooks/useHoldings";
@@ -16,10 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, BarChart, Bar } from "recharts";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
@@ -32,7 +29,6 @@ const currencySymbols: Record<DisplayCurrency, string> = {
 };
 
 export default function Dashboard() {
-  const { user } = useAuth();
   const { holdings, isLoading: holdingsLoading } = useHoldings();
   const { dividends, isLoading: dividendsLoading } = useDividends();
   const { transactions, isLoading: txLoading } = useTransactions();
@@ -44,8 +40,6 @@ export default function Dashboard() {
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('ILS');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  const [resetConfirmText, setResetConfirmText] = useState("");
-  const [isResetting, setIsResetting] = useState(false);
   const [showSP500, setShowSP500] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -192,26 +186,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleResetData = async () => {
-    if (!user?.id) return;
-    setIsResetting(true);
-    try {
-      // Delete in order: dividends, transactions, holding_categories, holdings, stock_splits
-      await supabase.from('dividends').delete().eq('user_id', user.id);
-      await supabase.from('transactions').delete().eq('user_id', user.id);
-      await supabase.from('holding_categories').delete().eq('user_id', user.id);
-      await supabase.from('stock_splits').delete().eq('user_id', user.id);
-      await supabase.from('holdings').delete().eq('user_id', user.id);
-      
-      toast({ title: "הנתונים נמחקו", description: "כל ההחזקות, העסקאות והדיבידנדים נמחקו" });
-      window.location.reload();
-    } catch (err) {
-      toast({ variant: "destructive", title: "שגיאה", description: "לא ניתן למחוק נתונים" });
-    } finally {
-      setIsResetting(false);
-      setResetConfirmText("");
-    }
-  };
+  // Reset moved to Settings page
 
   return (
     <AppLayout>
@@ -235,47 +210,6 @@ export default function Dashboard() {
             <Button asChild>
               <Link to="/invest"><Plus className="ml-2 h-4 w-4" />הוסף נייר ערך</Link>
             </Button>
-            
-            {/* Reset Button */}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" title="איפוס נתונים">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent dir="rtl">
-                <AlertDialogHeader>
-                  <AlertDialogTitle>איפוס כל הנתונים</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    פעולה זו תמחק את כל ההחזקות, העסקאות והדיבידנדים שלך.
-                    <br />
-                    <strong className="text-destructive">פעולה זו בלתי הפיכה!</strong>
-                    <br /><br />
-                    כדי לאשר, הקלד <strong>מחק הכל</strong> בשדה למטה:
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="py-4">
-                  <Label htmlFor="confirm-reset">אישור מחיקה</Label>
-                  <Input
-                    id="confirm-reset"
-                    value={resetConfirmText}
-                    onChange={(e) => setResetConfirmText(e.target.value)}
-                    placeholder='הקלד "מחק הכל"'
-                    className="mt-2"
-                  />
-                </div>
-                <AlertDialogFooter className="flex-row-reverse gap-2">
-                  <AlertDialogCancel>ביטול</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleResetData}
-                    disabled={resetConfirmText !== "מחק הכל" || isResetting}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    {isResetting ? "מוחק..." : "מחק הכל"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
           </div>
         </div>
 
