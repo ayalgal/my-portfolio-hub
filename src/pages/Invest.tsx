@@ -198,10 +198,13 @@ export default function Invest() {
         </div>
 
         
-
-        {isLoading ? (
+        {(() => {
+          const activeHoldings = holdings.filter(h => h.quantity > 0);
+          const archivedHoldings = holdings.filter(h => h.quantity <= 0);
+          
+          return isLoading ? (
           <Card><CardContent className="py-8"><Skeleton className="h-40 w-full" /></CardContent></Card>
-        ) : holdings.length === 0 ? (
+        ) : activeHoldings.length === 0 && archivedHoldings.length === 0 ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <TrendingUp className="h-12 w-12 text-muted-foreground mb-4" />
