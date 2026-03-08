@@ -250,30 +250,49 @@ export default function HoldingDetail() {
                 ) : dividends.length === 0 ? (
                   <p className="text-center text-muted-foreground py-8">אין דיבידנדים — לחץ על "עדכן מחירים" בדשבורד כדי לטעון אוטומטית</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">תאריך</TableHead>
-                        <TableHead className="text-right">סכום ברוטו</TableHead>
-                        <TableHead className="text-right">מס</TableHead>
-                        <TableHead className="text-right">סכום נטו</TableHead>
-                        <TableHead className="text-right">מניות</TableHead>
-                        <TableHead className="text-right">הערות</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {dividends.map(div => (
-                        <TableRow key={div.id}>
-                          <TableCell dir="ltr">{div.payment_date}</TableCell>
-                          <TableCell dir="ltr" className="text-green-500">{currSym}{div.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
-                          <TableCell dir="ltr" className="text-red-500">{currSym}{(div.tax_withheld ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
-                          <TableCell dir="ltr" className="font-semibold">{currSym}{(div.amount - (div.tax_withheld ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
-                          <TableCell dir="ltr">{div.shares_at_payment}</TableCell>
-                          <TableCell className="text-muted-foreground text-xs">{div.notes}</TableCell>
+                  <TooltipProvider>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-right">תאריך</TableHead>
+                          <TableHead className="text-right">סכום ברוטו</TableHead>
+                          <TableHead className="text-right w-10">שינוי</TableHead>
+                          <TableHead className="text-right">מס</TableHead>
+                          <TableHead className="text-right">סכום נטו</TableHead>
+                          <TableHead className="text-right">מניות</TableHead>
+                          <TableHead className="text-right">הערות</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                      </TableHeader>
+                      <TableBody>
+                        {dividends.map((div, idx) => {
+                          const prevDiv = idx < dividends.length - 1 ? dividends[idx + 1] : null;
+                          const changeInfo = getDividendChangeInfo(div.amount, prevDiv?.amount ?? null);
+                          return (
+                            <TableRow key={div.id}>
+                              <TableCell dir="ltr">{div.payment_date}</TableCell>
+                              <TableCell dir="ltr" className="text-green-500">{currSym}{div.amount.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell className="text-center">
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex cursor-default">{changeInfo.icon}</span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" dir="rtl">
+                                    {changeInfo.changePercent !== null
+                                      ? `${changeInfo.changePercent > 0 ? '+' : ''}${changeInfo.changePercent.toFixed(1)}% מהדיבידנד הקודם`
+                                      : "אין דיבידנד קודם להשוואה"}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TableCell>
+                              <TableCell dir="ltr" className="text-red-500">{currSym}{(div.tax_withheld ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell dir="ltr" className="font-semibold">{currSym}{(div.amount - (div.tax_withheld ?? 0)).toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell dir="ltr">{div.shares_at_payment}</TableCell>
+                              <TableCell className="text-muted-foreground text-xs">{div.notes}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TooltipProvider>
                 )}
               </CardContent>
             </Card>
