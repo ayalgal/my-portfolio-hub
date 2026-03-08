@@ -176,7 +176,7 @@ export default function HoldingDetail() {
           </Card>
           <Card>
             <CardContent className="pt-4 pb-4">
-              <p className="text-xs text-muted-foreground">תשואת דיבידנד קדימה</p>
+              <p className="text-xs text-muted-foreground">תשואת דיבידנד</p>
               <p className="text-2xl font-bold">{forwardYield.toFixed(2)}%</p>
               <p className="text-xs text-muted-foreground" dir="ltr">{currSym}{forwardDivPerShare.toFixed(2)}/מניה/שנה</p>
             </CardContent>
