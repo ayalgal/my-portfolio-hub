@@ -140,6 +140,7 @@ export default function Invest() {
                         <SelectItem value="etf">ETF</SelectItem>
                         <SelectItem value="mutual_fund">קרן נאמנות</SelectItem>
                         <SelectItem value="israeli_fund">קרן כספית ישראלית</SelectItem>
+                        <SelectItem value="bank_savings">חיסכון בנקאי</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
