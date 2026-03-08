@@ -107,6 +107,20 @@ Deno.serve(async (req) => {
 
     if (holdingsError) throw holdingsError;
 
+    // Get earliest transaction date per holding for dividend filtering
+    const { data: txDates } = await supabase
+      .from('transactions')
+      .select('holding_id, transaction_date')
+      .eq('transaction_type', 'buy')
+      .order('transaction_date', { ascending: true });
+
+    const earliestTxDate: Record<string, string> = {};
+    for (const tx of txDates || []) {
+      if (!earliestTxDate[tx.holding_id] || tx.transaction_date < earliestTxDate[tx.holding_id]) {
+        earliestTxDate[tx.holding_id] = tx.transaction_date;
+      }
+    }
+
     let updated = 0;
     let failed = 0;
     let splitsDetected = 0;
@@ -131,10 +145,12 @@ Deno.serve(async (req) => {
       }
 
       // Fetch splits and dividends
-      const createdAt = new Date(holding.created_at || '2020-01-01');
-      // Fetch events from 2 years before created_at to catch historical dividends
-      const eventsFrom = new Date(createdAt);
-      eventsFrom.setFullYear(eventsFrom.getFullYear() - 2);
+      // Fetch events from earliest transaction or 2 years back
+      const earliestDate = earliestTxDate[holding.id] 
+        ? new Date(earliestTxDate[holding.id]) 
+        : new Date(holding.created_at || '2020-01-01');
+      const eventsFrom = new Date(earliestDate);
+      eventsFrom.setMonth(eventsFrom.getMonth() - 1); // 1 month buffer
       const { splits, dividends } = await fetchYahooSplitsAndDividends(yahooSymbol, eventsFrom);
 
       // Store splits
@@ -159,10 +175,12 @@ Deno.serve(async (req) => {
       // Store dividends — only for dates when user held the stock
       for (const div of dividends) {
         const divDate = new Date(div.date);
-        const holdingCreated = new Date(holding.created_at || '2099-01-01');
+        const holdingStart = earliestTxDate[holding.id] 
+          ? new Date(earliestTxDate[holding.id])
+          : new Date(holding.created_at || '2099-01-01');
         
-        // Only add dividends after user purchased (use created_at as proxy)
-        if (divDate < holdingCreated) continue;
+        // Only add dividends after user first purchased
+        if (divDate < holdingStart) continue;
 
         // Upsert dividend — use holding_id + payment_date as natural key
         const { data: existing } = await supabase

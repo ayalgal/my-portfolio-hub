@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,7 @@ const PRESET_CATEGORIES = [
 ];
 
 export default function Invest() {
+  const navigate = useNavigate();
   const [selectedAssetType, setSelectedAssetType] = useState("stock");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -236,7 +238,7 @@ export default function Invest() {
                     const holdingCats = getCategoriesForHolding(holding.id);
                     
                     return (
-                      <TableRow key={holding.id}>
+                      <TableRow key={holding.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${holding.id}`)}>
                         <TableCell className="font-medium" dir="ltr">
                           {holding.fund_number || holding.symbol}
                         </TableCell>
