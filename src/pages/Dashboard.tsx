@@ -333,7 +333,7 @@ export default function Dashboard() {
                       <button className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors text-right" onClick={() => setExpandedCategory(expandedCategory === cat.id ? null : cat.id)}>
                         <div className="flex items-center gap-3">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color || "#8b5cf6" }} />
-                          <span className="font-medium">{cat.name}</span>
+                          <span className="font-medium hover:underline" onClick={(e) => { e.stopPropagation(); navigate(`/category/${cat.id}`); }}>{cat.name}</span>
                           <span className="text-xs text-muted-foreground">({cat.holdings.length})</span>
                         </div>
                         <div className="flex items-center gap-3">
