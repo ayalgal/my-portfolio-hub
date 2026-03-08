@@ -13,9 +13,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDividends } from "@/hooks/useDividends";
 import { useHoldings } from "@/hooks/useHoldings";
 import { useHoldingCategories } from "@/hooks/useHoldingCategories";
+import { useExchangeRates } from "@/hooks/useExchangeRates";
 import { DividendFilters, type GroupBy } from "@/components/dividends/DividendFilters";
 import { DividendTable } from "@/components/dividends/DividendTable";
 import { DividendSummary } from "@/components/dividends/DividendSummary";
+
+type DisplayCurrency = "ILS" | "USD" | "CAD";
+const currSymbols: Record<DisplayCurrency, string> = { ILS: "₪", USD: "$", CAD: "C$" };
 
 export default function Dividends() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -23,9 +27,11 @@ export default function Dividends() {
   const [selectedHoldingId, setSelectedHoldingId] = useState("");
   const [groupBy, setGroupBy] = useState<GroupBy>("all");
   const [taxRate, setTaxRate] = useState(25);
+  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>("USD");
   const { dividends, isLoading, createDividend } = useDividends();
   const { holdings } = useHoldings();
   const { holdingCategories } = useHoldingCategories();
+  const { convertToILS, convertFromILS } = useExchangeRates();
 
   const handleAddDividend = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -45,15 +51,13 @@ export default function Dividends() {
     });
   };
 
-  const getRate = (currency: string | null) => {
-    if (currency === "USD") return 3.7;
-    if (currency === "EUR") return 4.0;
-    if (currency === "CAD") return 2.7;
-    return 1;
+  const fmt = (amountILS: number) => {
+    const val = convertFromILS(amountILS, displayCurrency);
+    return `${currSymbols[displayCurrency]}${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
-  const totalDividends = dividends.reduce((sum, d) => sum + d.amount * getRate(d.currency), 0);
-  const totalTax = dividends.reduce((sum, d) => sum + (d.tax_withheld || 0) * getRate(d.currency), 0);
+  const totalDividendsILS = dividends.reduce((sum, d) => sum + convertToILS(d.amount, d.currency || "ILS"), 0);
+  const totalTaxILS = dividends.reduce((sum, d) => sum + convertToILS(d.tax_withheld || 0, d.currency || "ILS"), 0);
   const israeliCount = dividends.filter(d => d.is_israeli).length;
 
   return (
@@ -64,7 +68,17 @@ export default function Dividends() {
             <h1 className="text-3xl font-bold">דיבידנדים</h1>
             <p className="text-muted-foreground">מעקב אחר הכנסות מדיבידנדים</p>
           </div>
-          <div className="flex items-end gap-3">
+          <div className="flex items-end gap-3 flex-wrap">
+            <Select value={displayCurrency} onValueChange={(v) => setDisplayCurrency(v as DisplayCurrency)}>
+              <SelectTrigger className="w-[100px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="USD">$ דולר</SelectItem>
+                <SelectItem value="ILS">₪ שקל</SelectItem>
+                <SelectItem value="CAD">C$ קנדי</SelectItem>
+              </SelectContent>
+            </Select>
             <DividendFilters groupBy={groupBy} onGroupByChange={setGroupBy} taxRate={taxRate} onTaxRateChange={setTaxRate} />
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
@@ -127,7 +141,7 @@ export default function Dividends() {
             <CardContent>
               {isLoading ? <Skeleton className="h-8 w-24" /> : (
                 <>
-                  <div className="text-2xl font-bold text-green-500">₪{totalDividends.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                  <div className="text-2xl font-bold text-green-500">{fmt(totalDividendsILS)}</div>
                   <p className="text-xs text-muted-foreground">מ-{dividends.length} תשלומים</p>
                 </>
               )}
@@ -141,7 +155,7 @@ export default function Dividends() {
             <CardContent>
               {isLoading ? <Skeleton className="h-8 w-24" /> : (
                 <>
-                  <div className="text-2xl font-bold">₪{totalTax.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                  <div className="text-2xl font-bold">{fmt(totalTaxILS)}</div>
                   <p className="text-xs text-muted-foreground">ניכוי במקור</p>
                 </>
               )}
@@ -163,7 +177,6 @@ export default function Dividends() {
           </Card>
         </div>
 
-        {/* Main content tabs: History vs Summary vs Forecast */}
         <Tabs defaultValue="history" dir="rtl">
           <TabsList>
             <TabsTrigger value="history">היסטוריה</TabsTrigger>

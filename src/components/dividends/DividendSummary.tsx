@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface DividendWithHolding {
   id: string;
@@ -32,6 +33,17 @@ const getRate = (currency: string | null) => {
   return 1;
 };
 
+type DisplayCurrency = "ILS" | "USD" | "CAD";
+const currSymbols: Record<DisplayCurrency, string> = { ILS: "₪", USD: "$", CAD: "C$" };
+
+const convertToILS = (amount: number, fromCurrency: string) => {
+  return amount * getRate(fromCurrency);
+};
+const convertFromILS = (amountILS: number, toCurrency: DisplayCurrency) => {
+  const rates: Record<string, number> = { USD: 3.7, CAD: 2.7, ILS: 1 };
+  return amountILS / (rates[toCurrency] || 1);
+};
+
 interface Props {
   dividends: DividendWithHolding[];
   holdingCategories: HoldingCategory[];
@@ -39,6 +51,12 @@ interface Props {
 
 export function DividendSummary({ dividends, holdingCategories }: Props) {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>("USD");
+
+  const fmt = (amountILS: number) => {
+    const val = convertFromILS(amountILS, displayCurrency);
+    return `${currSymbols[displayCurrency]}${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  };
 
   // Summary per holding
   const holdingSummary = useMemo(() => {
@@ -48,8 +66,8 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
     }>();
     for (const d of dividends) {
       const prev = map.get(d.holding_id);
-      const grossILS = d.amount * getRate(d.currency);
-      const taxILS = (d.tax_withheld || 0) * getRate(d.currency);
+      const grossILS = convertToILS(d.amount, d.currency || "ILS");
+      const taxILS = convertToILS(d.tax_withheld || 0, d.currency || "ILS");
       if (prev) {
         prev.totalGross += grossILS; prev.totalTax += taxILS; prev.count++;
       } else {
@@ -74,8 +92,8 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
     const catMap = new Map<string, { name: string; color: string | null; totalGross: number; totalTax: number; count: number; holdings: Set<string> }>();
     for (const d of dividends) {
       const cats = holdingToCats.get(d.holding_id) || [{ name: "ללא תיקייה", color: null, id: "uncategorized" }];
-      const grossILS = d.amount * getRate(d.currency);
-      const taxILS = (d.tax_withheld || 0) * getRate(d.currency);
+      const grossILS = convertToILS(d.amount, d.currency || "ILS");
+      const taxILS = convertToILS(d.tax_withheld || 0, d.currency || "ILS");
       for (const cat of cats) {
         const prev = catMap.get(cat.id);
         if (prev) { prev.totalGross += grossILS; prev.totalTax += taxILS; prev.count++; prev.holdings.add(d.holding_id); }
@@ -92,51 +110,58 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
     return Array.from(yrs).sort((a, b) => b - a);
   }, [dividends]);
 
-  // Monthly history for selected year (real data only)
+  // Monthly history for selected year — ONLY months with data
   const monthlyHistory = useMemo(() => {
     const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
-    const result = monthNames.map((name, i) => ({
-      label: `${name} ${selectedYear}`,
-      month: i,
-      grossILS: 0,
-      taxILS: 0,
-      netILS: 0,
-      count: 0,
-      holdings: new Set<string>(),
-    }));
+    const monthData = new Map<number, { grossILS: number; taxILS: number; count: number; holdings: Set<string> }>();
 
     for (const d of dividends) {
       if (!d.payment_date) continue;
       const date = new Date(d.payment_date);
       if (date.getFullYear() !== selectedYear) continue;
       const monthIdx = date.getMonth();
-      const grossILS = d.amount * getRate(d.currency);
-      const taxILS = (d.tax_withheld || 0) * getRate(d.currency);
-      result[monthIdx].grossILS += grossILS;
-      result[monthIdx].taxILS += taxILS;
-      result[monthIdx].netILS += grossILS - taxILS;
-      result[monthIdx].count++;
-      result[monthIdx].holdings.add(d.holding_id);
+      const grossILS = convertToILS(d.amount, d.currency || "ILS");
+      const taxILS = convertToILS(d.tax_withheld || 0, d.currency || "ILS");
+      const existing = monthData.get(monthIdx);
+      if (existing) {
+        existing.grossILS += grossILS;
+        existing.taxILS += taxILS;
+        existing.count++;
+        existing.holdings.add(d.holding_id);
+      } else {
+        monthData.set(monthIdx, { grossILS, taxILS, count: 1, holdings: new Set([d.holding_id]) });
+      }
     }
-    return result;
+
+    return Array.from(monthData.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([monthIdx, data]) => ({
+        label: `${monthNames[monthIdx]} ${selectedYear}`,
+        month: monthIdx,
+        grossILS: data.grossILS,
+        taxILS: data.taxILS,
+        netILS: data.grossILS - data.taxILS,
+        count: data.count,
+        holdings: data.holdings,
+      }));
   }, [dividends, selectedYear]);
 
-  // Previous year same period for comparison
+  // Previous year same months for comparison
   const prevYearMonthly = useMemo(() => {
-    const result = Array(12).fill(0).map(() => ({ netILS: 0 }));
+    const result = new Map<number, number>();
     const prevYear = selectedYear - 1;
     for (const d of dividends) {
       if (!d.payment_date) continue;
       const date = new Date(d.payment_date);
       if (date.getFullYear() !== prevYear) continue;
-      const grossILS = d.amount * getRate(d.currency);
-      const taxILS = (d.tax_withheld || 0) * getRate(d.currency);
-      result[date.getMonth()].netILS += grossILS - taxILS;
+      const grossILS = convertToILS(d.amount, d.currency || "ILS");
+      const taxILS = convertToILS(d.tax_withheld || 0, d.currency || "ILS");
+      result.set(date.getMonth(), (result.get(date.getMonth()) || 0) + grossILS - taxILS);
     }
     return result;
   }, [dividends, selectedYear]);
 
-  // Last dividend info per holding (for ex-date and payment date display)
+  // Last dividend info per holding
   const lastDividendPerHolding = useMemo(() => {
     const map = new Map<string, DividendWithHolding>();
     for (const d of dividends) {
@@ -151,14 +176,27 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
 
   const getCurrSym = (c: string) => ({ ILS: "₪", USD: "$", EUR: "€", CAD: "C$" }[c] || c);
   const yearTotal = monthlyHistory.reduce((s, m) => s + m.netILS, 0);
-  const prevYearTotal = prevYearMonthly.reduce((s, m) => s + m.netILS, 0);
+  const prevYearTotal = Array.from(prevYearMonthly.values()).reduce((s, v) => s + v, 0);
   const yoyChange = prevYearTotal > 0 ? ((yearTotal - prevYearTotal) / prevYearTotal) * 100 : 0;
+
+  const currencySelector = (
+    <Select value={displayCurrency} onValueChange={(v) => setDisplayCurrency(v as DisplayCurrency)}>
+      <SelectTrigger className="w-[100px] h-8">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="USD">$ דולר</SelectItem>
+        <SelectItem value="ILS">₪ שקל</SelectItem>
+        <SelectItem value="CAD">C$ קנדי</SelectItem>
+      </SelectContent>
+    </Select>
+  );
 
   return (
     <div className="space-y-6">
-      {/* Monthly history by year */}
+      {/* Monthly history by year — only months with data */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <div>
             <CardTitle>היסטוריית דיבידנדים חודשית</CardTitle>
             <CardDescription>
@@ -170,73 +208,74 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
               )}
             </CardDescription>
           </div>
-          {years.length > 0 && (
-            <div className="flex items-center gap-1">
-              {years.map(y => (
-                <Button key={y} variant={y === selectedYear ? "default" : "ghost"} size="sm" onClick={() => setSelectedYear(y)}>
-                  {y}
-                </Button>
-              ))}
-            </div>
-          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {currencySelector}
+            {years.length > 0 && (
+              <div className="flex items-center gap-1">
+                {years.map(y => (
+                  <Button key={y} variant={y === selectedYear ? "default" : "ghost"} size="sm" onClick={() => setSelectedYear(y)}>
+                    {y}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-right">חודש</TableHead>
-                <TableHead className="text-right">מניות</TableHead>
-                <TableHead className="text-right">ברוטו (₪)</TableHead>
-                <TableHead className="text-right">מס (₪)</TableHead>
-                <TableHead className="text-right">נטו (₪)</TableHead>
-                <TableHead className="text-right">מול {selectedYear - 1}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {monthlyHistory.map((m, i) => {
-                const prevNet = prevYearMonthly[i].netILS;
-                const diff = prevNet > 0 ? ((m.netILS - prevNet) / prevNet) * 100 : null;
-                return (
-                  <TableRow key={i} className={m.count === 0 ? 'opacity-40' : ''}>
-                    <TableCell className="font-medium">{m.label}</TableCell>
-                    <TableCell>{m.count > 0 ? m.count : '—'}</TableCell>
-                    <TableCell dir="ltr" className="text-green-500 font-semibold">
-                      {m.grossILS > 0 ? `₪${m.grossILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
-                    </TableCell>
-                    <TableCell dir="ltr" className="text-muted-foreground">
-                      {m.taxILS > 0 ? `₪${m.taxILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
-                    </TableCell>
-                    <TableCell dir="ltr" className="font-bold">
-                      {m.netILS > 0 ? `₪${m.netILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
-                    </TableCell>
-                    <TableCell dir="ltr">
-                      {diff !== null && m.netILS > 0 ? (
-                        <span className={diff >= 0 ? 'text-green-500' : 'text-red-500'}>
-                          {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
-                        </span>
-                      ) : prevNet > 0 && m.netILS === 0 ? (
-                        <span className="text-red-500">-100%</span>
-                      ) : '—'}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-              <TableRow className="border-t-2 font-bold">
-                <TableCell>סה״כ {selectedYear}</TableCell>
-                <TableCell>{monthlyHistory.reduce((s, m) => s + m.count, 0)}</TableCell>
-                <TableCell dir="ltr" className="text-green-500">₪{monthlyHistory.reduce((s, m) => s + m.grossILS, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                <TableCell dir="ltr" className="text-muted-foreground">₪{monthlyHistory.reduce((s, m) => s + m.taxILS, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                <TableCell dir="ltr">₪{yearTotal.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                <TableCell dir="ltr">
-                  {prevYearTotal > 0 && (
-                    <span className={yoyChange >= 0 ? 'text-green-500' : 'text-red-500'}>
-                      {yoyChange >= 0 ? '+' : ''}{yoyChange.toFixed(1)}%
-                    </span>
-                  )}
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+          {monthlyHistory.length === 0 ? (
+            <p className="text-center text-muted-foreground py-8">אין דיבידנדים ב-{selectedYear}</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-right">חודש</TableHead>
+                  <TableHead className="text-right">תשלומים</TableHead>
+                  <TableHead className="text-right">ברוטו</TableHead>
+                  <TableHead className="text-right">מס</TableHead>
+                  <TableHead className="text-right">נטו</TableHead>
+                  <TableHead className="text-right">מול {selectedYear - 1}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {monthlyHistory.map((m) => {
+                  const prevNet = prevYearMonthly.get(m.month) || 0;
+                  const diff = prevNet > 0 ? ((m.netILS - prevNet) / prevNet) * 100 : null;
+                  return (
+                    <TableRow key={m.month}>
+                      <TableCell className="font-medium">{m.label}</TableCell>
+                      <TableCell>{m.count}</TableCell>
+                      <TableCell dir="ltr" className="text-green-500 font-semibold">{fmt(m.grossILS)}</TableCell>
+                      <TableCell dir="ltr" className="text-muted-foreground">{fmt(m.taxILS)}</TableCell>
+                      <TableCell dir="ltr" className="font-bold">{fmt(m.netILS)}</TableCell>
+                      <TableCell dir="ltr">
+                        {diff !== null ? (
+                          <span className={diff >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            {diff >= 0 ? '+' : ''}{diff.toFixed(0)}%
+                          </span>
+                        ) : prevNet > 0 ? (
+                          <span className="text-red-500">-100%</span>
+                        ) : '—'}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                <TableRow className="border-t-2 font-bold">
+                  <TableCell>סה״כ {selectedYear}</TableCell>
+                  <TableCell>{monthlyHistory.reduce((s, m) => s + m.count, 0)}</TableCell>
+                  <TableCell dir="ltr" className="text-green-500">{fmt(monthlyHistory.reduce((s, m) => s + m.grossILS, 0))}</TableCell>
+                  <TableCell dir="ltr" className="text-muted-foreground">{fmt(monthlyHistory.reduce((s, m) => s + m.taxILS, 0))}</TableCell>
+                  <TableCell dir="ltr">{fmt(yearTotal)}</TableCell>
+                  <TableCell dir="ltr">
+                    {prevYearTotal > 0 && (
+                      <span className={yoyChange >= 0 ? 'text-green-500' : 'text-red-500'}>
+                        {yoyChange >= 0 ? '+' : ''}{yoyChange.toFixed(1)}%
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -309,9 +348,9 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
                   <TableRow>
                     <TableHead className="text-right">נייר ערך</TableHead>
                     <TableHead className="text-right">תשלומים</TableHead>
-                    <TableHead className="text-right">סה״כ ברוטו (₪)</TableHead>
-                    <TableHead className="text-right">סה״כ מס (₪)</TableHead>
-                    <TableHead className="text-right">סה״כ נטו (₪)</TableHead>
+                    <TableHead className="text-right">סה״כ ברוטו</TableHead>
+                    <TableHead className="text-right">סה״כ מס</TableHead>
+                    <TableHead className="text-right">סה״כ נטו</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -324,18 +363,18 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
                         </Link>
                       </TableCell>
                       <TableCell>{h.count}</TableCell>
-                      <TableCell dir="ltr" className="text-green-500 font-semibold">₪{h.totalGross.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                      <TableCell dir="ltr" className="text-muted-foreground">₪{h.totalTax.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                      <TableCell dir="ltr" className="font-bold">₪{(h.totalGross - h.totalTax).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                      <TableCell dir="ltr" className="text-green-500 font-semibold">{fmt(h.totalGross)}</TableCell>
+                      <TableCell dir="ltr" className="text-muted-foreground">{fmt(h.totalTax)}</TableCell>
+                      <TableCell dir="ltr" className="font-bold">{fmt(h.totalGross - h.totalTax)}</TableCell>
                     </TableRow>
                   ))}
                   {holdingSummary.length > 1 && (
                     <TableRow className="border-t-2 font-bold">
                       <TableCell>סה״כ</TableCell>
                       <TableCell>{holdingSummary.reduce((s, h) => s + h.count, 0)}</TableCell>
-                      <TableCell dir="ltr" className="text-green-500">₪{holdingSummary.reduce((s, h) => s + h.totalGross, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                      <TableCell dir="ltr" className="text-muted-foreground">₪{holdingSummary.reduce((s, h) => s + h.totalTax, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                      <TableCell dir="ltr">₪{holdingSummary.reduce((s, h) => s + h.totalGross - h.totalTax, 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                      <TableCell dir="ltr" className="text-green-500">{fmt(holdingSummary.reduce((s, h) => s + h.totalGross, 0))}</TableCell>
+                      <TableCell dir="ltr" className="text-muted-foreground">{fmt(holdingSummary.reduce((s, h) => s + h.totalTax, 0))}</TableCell>
+                      <TableCell dir="ltr">{fmt(holdingSummary.reduce((s, h) => s + h.totalGross - h.totalTax, 0))}</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -353,9 +392,9 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
                     <TableHead className="text-right">תיקייה</TableHead>
                     <TableHead className="text-right">ניירות</TableHead>
                     <TableHead className="text-right">תשלומים</TableHead>
-                    <TableHead className="text-right">סה״כ ברוטו (₪)</TableHead>
-                    <TableHead className="text-right">סה״כ מס (₪)</TableHead>
-                    <TableHead className="text-right">סה״כ נטו (₪)</TableHead>
+                    <TableHead className="text-right">סה״כ ברוטו</TableHead>
+                    <TableHead className="text-right">סה״כ מס</TableHead>
+                    <TableHead className="text-right">סה״כ נטו</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -369,9 +408,9 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
                       </TableCell>
                       <TableCell>{c.holdings.size}</TableCell>
                       <TableCell>{c.count}</TableCell>
-                      <TableCell dir="ltr" className="text-green-500 font-semibold">₪{c.totalGross.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                      <TableCell dir="ltr" className="text-muted-foreground">₪{c.totalTax.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                      <TableCell dir="ltr" className="font-bold">₪{(c.totalGross - c.totalTax).toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                      <TableCell dir="ltr" className="text-green-500 font-semibold">{fmt(c.totalGross)}</TableCell>
+                      <TableCell dir="ltr" className="text-muted-foreground">{fmt(c.totalTax)}</TableCell>
+                      <TableCell dir="ltr" className="font-bold">{fmt(c.totalGross - c.totalTax)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
