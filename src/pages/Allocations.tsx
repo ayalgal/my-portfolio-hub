@@ -1,12 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { useAllocations } from "@/hooks/useAllocations";
 import { useHoldings } from "@/hooks/useHoldings";
 import { useHoldingCategories } from "@/hooks/useHoldingCategories";
@@ -14,66 +14,57 @@ import { useExchangeRates } from "@/hooks/useExchangeRates";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
 
 const colorOptions = [
   "#22c55e", "#f97316", "#3b82f6", "#6b7280",
   "#8b5cf6", "#ef4444", "#ec4899", "#06b6d4",
 ];
 
+const getCurrencySymbol = (c: string) => ({ ILS: "₪", USD: "$", CAD: "C$", EUR: "€" }[c] || c);
+
 export default function Allocations() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedColor, setSelectedColor] = useState(colorOptions[0]);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const { categories, createCategory, deleteCategory, totalTarget, isLoading } = useAllocations();
   const { portfolios } = usePortfolio();
   const { holdings } = useHoldings(portfolios?.[0]?.id);
-  const { holdingCategories, getCategoriesForHolding } = useHoldingCategories();
+  const { holdingCategories } = useHoldingCategories();
   const { convertToILS, convertFromILS } = useExchangeRates();
 
-  // Calculate actual values per category
+  const getCategoryHoldings = (categoryId: string) => {
+    const linkedIds = holdingCategories.filter(hc => hc.category_id === categoryId).map(hc => hc.holding_id);
+    return holdings.filter(h => linkedIds.includes(h.id));
+  };
+
+  const getHoldingValueUSD = (h: any) => {
+    const val = h.quantity * (h.current_price ?? h.average_cost);
+    return convertFromILS(convertToILS(val, h.currency || "ILS"), "USD");
+  };
+
   const categoryData = categories.map((cat) => {
-    const linkedHoldingIds = holdingCategories
-      .filter(hc => hc.category_id === cat.id)
-      .map(hc => hc.holding_id);
-
-    const catHoldings = holdings.filter(h => linkedHoldingIds.includes(h.id));
-    const valueUSD = catHoldings.reduce((sum, h) => {
-      const val = h.quantity * (h.current_price ?? h.average_cost);
-      return sum + convertFromILS(convertToILS(val, h.currency || "ILS"), "USD");
-    }, 0);
-
-    return {
-      ...cat,
-      valueUSD,
-      holdingsCount: catHoldings.length,
-    };
+    const catHoldings = getCategoryHoldings(cat.id);
+    const valueUSD = catHoldings.reduce((sum, h) => sum + getHoldingValueUSD(h), 0);
+    return { ...cat, valueUSD, holdings: catHoldings };
   });
 
-  // Uncategorized holdings
-  const categorizedHoldingIds = new Set(holdingCategories.map(hc => hc.holding_id));
-  const uncategorizedHoldings = holdings.filter(h => !categorizedHoldingIds.has(h.id));
-  const uncategorizedValueUSD = uncategorizedHoldings.reduce((sum, h) => {
-    const val = h.quantity * (h.current_price ?? h.average_cost);
-    return sum + convertFromILS(convertToILS(val, h.currency || "ILS"), "USD");
-  }, 0);
+  const categorizedIds = new Set(holdingCategories.map(hc => hc.holding_id));
+  const uncategorized = holdings.filter(h => !categorizedIds.has(h.id));
+  const uncategorizedUSD = uncategorized.reduce((sum, h) => sum + getHoldingValueUSD(h), 0);
+  const totalValueUSD = categoryData.reduce((s, c) => s + c.valueUSD, 0) + uncategorizedUSD;
 
-  const totalValueUSD = categoryData.reduce((sum, c) => sum + c.valueUSD, 0) + uncategorizedValueUSD;
-
-  // Pie chart data
   const pieData = [
-    ...categoryData
-      .filter(c => c.valueUSD > 0)
-      .map(c => ({
-        name: c.name,
-        value: Math.round(c.valueUSD),
-        color: c.color || "#6b7280",
-        percent: totalValueUSD > 0 ? (c.valueUSD / totalValueUSD) * 100 : 0,
-      })),
-    ...(uncategorizedValueUSD > 0 ? [{
-      name: "ללא קטגוריה",
-      value: Math.round(uncategorizedValueUSD),
-      color: "#d1d5db",
-      percent: totalValueUSD > 0 ? (uncategorizedValueUSD / totalValueUSD) * 100 : 0,
+    ...categoryData.filter(c => c.valueUSD > 0).map(c => ({
+      name: c.name, value: Math.round(c.valueUSD), color: c.color || "#6b7280",
+      percent: totalValueUSD > 0 ? (c.valueUSD / totalValueUSD) * 100 : 0,
+    })),
+    ...(uncategorizedUSD > 0 ? [{
+      name: "ללא קטגוריה", value: Math.round(uncategorizedUSD), color: "#d1d5db",
+      percent: totalValueUSD > 0 ? (uncategorizedUSD / totalValueUSD) * 100 : 0,
     }] : []),
   ];
 
@@ -102,6 +93,44 @@ export default function Allocations() {
     }
     return null;
   };
+
+  const HoldingsTable = ({ catHoldings }: { catHoldings: typeof holdings }) => (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead className="text-right">סימול</TableHead>
+          <TableHead className="text-right">שם</TableHead>
+          <TableHead className="text-right">כמות</TableHead>
+          <TableHead className="text-right">שווי</TableHead>
+          <TableHead className="text-right">רווח/הפסד</TableHead>
+          <TableHead className="w-[40px]"></TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {catHoldings.map(h => {
+          const curr = getCurrencySymbol(h.currency || "ILS");
+          const price = h.current_price ?? h.average_cost;
+          const val = h.quantity * price;
+          const cost = h.quantity * h.average_cost;
+          const pnl = val - cost;
+          return (
+            <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
+              <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
+              <TableCell>{h.name}</TableCell>
+              <TableCell dir="ltr">{h.quantity.toLocaleString()}</TableCell>
+              <TableCell dir="ltr">{curr}{val.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+              <TableCell dir="ltr" className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
+                {h.current_price ? `${pnl >= 0 ? '+' : ''}${curr}${pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+              </TableCell>
+              <TableCell>
+                <ExternalLink className="h-3 w-3 text-muted-foreground" />
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
 
   return (
     <AppLayout>
@@ -133,15 +162,9 @@ export default function Allocations() {
                   <Label>צבע</Label>
                   <div className="flex gap-2 flex-wrap">
                     {colorOptions.map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => setSelectedColor(color)}
-                        className={`w-8 h-8 rounded-full transition-transform ${
-                          selectedColor === color ? 'scale-125 ring-2 ring-offset-2 ring-primary' : ''
-                        }`}
-                        style={{ backgroundColor: color }}
-                      />
+                      <button key={color} type="button" onClick={() => setSelectedColor(color)}
+                        className={`w-8 h-8 rounded-full transition-transform ${selectedColor === color ? 'scale-125 ring-2 ring-offset-2 ring-primary' : ''}`}
+                        style={{ backgroundColor: color }} />
                     ))}
                   </div>
                 </div>
@@ -153,8 +176,8 @@ export default function Allocations() {
           </Dialog>
         </div>
 
-        {/* Pie Chart + Summary */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Pie Chart */}
           <Card className="lg:col-span-1">
             <CardHeader>
               <CardTitle className="text-base">התפלגות הפורטפוליו</CardTitle>
@@ -164,28 +187,15 @@ export default function Allocations() {
               {pieData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={110}
-                      paddingAngle={2}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={index} fill={entry.color} stroke="none" />
-                      ))}
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={110} paddingAngle={2} dataKey="value">
+                      {pieData.map((entry, i) => <Cell key={i} fill={entry.color} stroke="none" />)}
                     </Pie>
                     <Tooltip content={<CustomTooltip />} />
                   </PieChart>
                 </ResponsiveContainer>
               ) : (
-                <div className="h-[260px] flex items-center justify-center text-muted-foreground">
-                  אין נתונים להצגה
-                </div>
+                <div className="h-[260px] flex items-center justify-center text-muted-foreground">אין נתונים</div>
               )}
-              {/* Legend */}
               <div className="mt-4 space-y-2">
                 {pieData.map((item, i) => (
                   <div key={i} className="flex items-center justify-between text-sm">
@@ -200,67 +210,101 @@ export default function Allocations() {
             </CardContent>
           </Card>
 
-          {/* Categories List */}
-          <div className="lg:col-span-2 space-y-4">
+          {/* Categories */}
+          <div className="lg:col-span-2 space-y-3">
             {isLoading ? (
-              <>
-                <Skeleton className="h-32 w-full" />
-                <Skeleton className="h-32 w-full" />
-              </>
+              <><Skeleton className="h-24 w-full" /><Skeleton className="h-24 w-full" /></>
             ) : categories.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <Plus className="h-12 w-12 text-muted-foreground mb-4" />
                   <h3 className="text-lg font-semibold mb-2">אין קטגוריות</h3>
-                  <p className="text-muted-foreground text-center mb-4">הוסף קטגוריות הקצאה לניהול הפורטפוליו</p>
-                  <Button onClick={() => setIsDialogOpen(true)}>
-                    <Plus className="ml-2 h-4 w-4" />הוסף קטגוריה
-                  </Button>
+                  <Button onClick={() => setIsDialogOpen(true)}><Plus className="ml-2 h-4 w-4" />הוסף קטגוריה</Button>
                 </CardContent>
               </Card>
             ) : (
-              categoryData.map((category) => {
-                const actualPercent = totalValueUSD > 0 ? (category.valueUSD / totalValueUSD) * 100 : 0;
-                const targetPercent = category.target_percentage ?? 0;
-                const diff = actualPercent - targetPercent;
+              <>
+                {categoryData.map((cat) => {
+                  const actualPct = totalValueUSD > 0 ? (cat.valueUSD / totalValueUSD) * 100 : 0;
+                  const targetPct = cat.target_percentage ?? 0;
+                  const diff = actualPct - targetPct;
+                  const isExpanded = expandedCategory === cat.id;
 
-                return (
-                  <Card key={category.id}>
-                    <CardContent className="py-4">
-                      <div className="flex items-center justify-between mb-3">
+                  return (
+                    <Card key={cat.id} className="overflow-hidden">
+                      <div
+                        className="flex items-center justify-between py-4 px-6 cursor-pointer hover:bg-muted/30 transition-colors"
+                        onClick={() => setExpandedCategory(isExpanded ? null : cat.id)}
+                      >
                         <div className="flex items-center gap-3">
-                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: category.color || "#6b7280" }} />
+                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: cat.color || "#6b7280" }} />
                           <div>
-                            <h3 className="font-semibold">{category.name}</h3>
-                            <p className="text-xs text-muted-foreground">{category.holdingsCount} נכסים</p>
+                            <h3 className="font-semibold">{cat.name}</h3>
+                            <p className="text-xs text-muted-foreground">{cat.holdings.length} נכסים</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-4">
                           <div className="text-left">
-                            <p className="font-semibold">${category.valueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                            <p className="text-xs text-muted-foreground">{actualPercent.toFixed(1)}%</p>
+                            <p className="font-semibold" dir="ltr">${cat.valueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                            <p className="text-xs text-muted-foreground">{actualPct.toFixed(1)}%{targetPct > 0 ? ` / יעד ${targetPct}%` : ''}</p>
                           </div>
-                          <Button variant="ghost" size="icon" onClick={() => deleteCategory.mutateAsync(category.id)}>
-                            <Trash2 className="h-4 w-4 text-muted-foreground" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); deleteCategory.mutateAsync(cat.id); }}>
+                              <Trash2 className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          </div>
                         </div>
                       </div>
-                      {targetPercent > 0 && (
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs text-muted-foreground">
-                            <span>בפועל: {actualPercent.toFixed(1)}%</span>
-                            <span>יעד: {targetPercent}%</span>
-                          </div>
-                          <Progress value={targetPercent > 0 ? (actualPercent / targetPercent) * 100 : 0} className="h-2" />
-                          <p className={`text-xs ${diff > 2 ? 'text-yellow-500' : diff < -2 ? 'text-blue-500' : 'text-green-500'}`}>
-                            {diff > 2 ? `עודף משקל +${diff.toFixed(1)}%` : diff < -2 ? `חסר משקל ${diff.toFixed(1)}%` : 'מאוזן ✓'}
+                      {targetPct > 0 && (
+                        <div className="px-6 pb-2">
+                          <Progress value={targetPct > 0 ? Math.min((actualPct / targetPct) * 100, 150) : 0} className="h-1.5" />
+                          <p className={`text-xs mt-1 ${diff > 2 ? 'text-yellow-500' : diff < -2 ? 'text-blue-500' : 'text-green-500'}`}>
+                            {diff > 2 ? `עודף +${diff.toFixed(1)}%` : diff < -2 ? `חסר ${diff.toFixed(1)}%` : 'מאוזן ✓'}
                           </p>
                         </div>
                       )}
-                    </CardContent>
+                      {isExpanded && cat.holdings.length > 0 && (
+                        <div className="border-t px-4 pb-4">
+                          <HoldingsTable catHoldings={cat.holdings} />
+                        </div>
+                      )}
+                      {isExpanded && cat.holdings.length === 0 && (
+                        <div className="border-t px-6 py-4 text-center text-muted-foreground text-sm">
+                          אין ניירות ערך בקטגוריה זו. הוסף מדף ההשקעות.
+                        </div>
+                      )}
+                    </Card>
+                  );
+                })}
+
+                {/* Uncategorized */}
+                {uncategorized.length > 0 && (
+                  <Card className="overflow-hidden">
+                    <div
+                      className="flex items-center justify-between py-4 px-6 cursor-pointer hover:bg-muted/30 transition-colors"
+                      onClick={() => setExpandedCategory(expandedCategory === '__uncategorized' ? null : '__uncategorized')}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 rounded-full bg-muted-foreground/30" />
+                        <div>
+                          <h3 className="font-semibold text-muted-foreground">ללא קטגוריה</h3>
+                          <p className="text-xs text-muted-foreground">{uncategorized.length} נכסים</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <p className="font-semibold text-muted-foreground" dir="ltr">${uncategorizedUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
+                        {expandedCategory === '__uncategorized' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </div>
+                    </div>
+                    {expandedCategory === '__uncategorized' && (
+                      <div className="border-t px-4 pb-4">
+                        <HoldingsTable catHoldings={uncategorized} />
+                      </div>
+                    )}
                   </Card>
-                );
-              })
+                )}
+              </>
             )}
           </div>
         </div>
