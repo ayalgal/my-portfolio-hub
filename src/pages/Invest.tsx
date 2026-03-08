@@ -539,6 +539,8 @@ export default function Invest() {
                 )}
               </div>
             )}
+            </CardContent>
+          </Card>
 
           {archivedHoldings.length > 0 && (
             <Card className="opacity-60">
