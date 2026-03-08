@@ -145,10 +145,12 @@ Deno.serve(async (req) => {
       }
 
       // Fetch splits and dividends
-      const createdAt = new Date(holding.created_at || '2020-01-01');
-      // Fetch events from 2 years before created_at to catch historical dividends
-      const eventsFrom = new Date(createdAt);
-      eventsFrom.setFullYear(eventsFrom.getFullYear() - 2);
+      // Fetch events from earliest transaction or 2 years back
+      const earliestDate = earliestTxDate[holding.id] 
+        ? new Date(earliestTxDate[holding.id]) 
+        : new Date(holding.created_at || '2020-01-01');
+      const eventsFrom = new Date(earliestDate);
+      eventsFrom.setMonth(eventsFrom.getMonth() - 1); // 1 month buffer
       const { splits, dividends } = await fetchYahooSplitsAndDividends(yahooSymbol, eventsFrom);
 
       // Store splits
