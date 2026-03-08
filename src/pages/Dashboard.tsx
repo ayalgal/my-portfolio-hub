@@ -29,7 +29,6 @@ const currencySymbols: Record<DisplayCurrency, string> = {
 };
 
 export default function Dashboard() {
-  const { user } = useAuth();
   const { holdings, isLoading: holdingsLoading } = useHoldings();
   const { dividends, isLoading: dividendsLoading } = useDividends();
   const { transactions, isLoading: txLoading } = useTransactions();
@@ -41,8 +40,6 @@ export default function Dashboard() {
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('ILS');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  const [resetConfirmText, setResetConfirmText] = useState("");
-  const [isResetting, setIsResetting] = useState(false);
   const [showSP500, setShowSP500] = useState(true);
   const { toast } = useToast();
   const navigate = useNavigate();
