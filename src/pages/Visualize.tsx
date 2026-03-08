@@ -114,7 +114,7 @@ export default function Visualize() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle>ביצועי הפורטפוליו לאורך זמן</CardTitle>
-                  <CardDescription>סכום מושקע מצטבר לעומת S&P 500</CardDescription>
+                  <CardDescription>סכום מושקע מצטבר לעומת S&P 500 (נתוני אמת)</CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
                   <Switch id="sp500-toggle" checked={showSP500} onCheckedChange={setShowSP500} />
