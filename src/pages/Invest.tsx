@@ -40,12 +40,25 @@ export default function Invest() {
   const [selectedAssetType, setSelectedAssetType] = useState("stock");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [sortField, setSortField] = useState<string>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filterText, setFilterText] = useState("");
   const { portfolios } = usePortfolio();
   const defaultPortfolioId = portfolios?.[0]?.id;
   const { holdings, isLoading, createHolding, deleteHolding } = useHoldings(defaultPortfolioId);
   const { categories, createCategory } = useAllocations();
   const { holdingCategories, assignCategory, removeCategory, getCategoriesForHolding } = useHoldingCategories();
   const { toast } = useToast();
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
 
   const handleAddHolding = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
