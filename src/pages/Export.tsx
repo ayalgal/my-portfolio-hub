@@ -4,9 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Download, FileSpreadsheet, FileText, FileJson } from "lucide-react";
+import { Download, FileSpreadsheet, FileJson } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useHoldings } from "@/hooks/useHoldings";
+import { useTransactions } from "@/hooks/useTransactions";
+import { useDividends } from "@/hooks/useDividends";
 
 export default function Export() {
   const [format, setFormat] = useState("csv");
@@ -14,30 +17,57 @@ export default function Export() {
   const [includeTransactions, setIncludeTransactions] = useState(true);
   const [includeDividends, setIncludeDividends] = useState(true);
   const { toast } = useToast();
+  const { holdings } = useHoldings();
+  const { transactions } = useTransactions();
+  const { dividends } = useDividends();
+
+  const generateCSV = (data: Record<string, unknown>[], filename: string) => {
+    if (data.length === 0) return "";
+    const headers = Object.keys(data[0]);
+    const rows = data.map(row => headers.map(h => `"${row[h] ?? ''}"`).join(","));
+    return [headers.join(","), ...rows].join("\n");
+  };
 
   const handleExport = () => {
-    // TODO: Generate and download file
-    toast({
-      title: "ייצוא בתהליך",
-      description: `הקובץ ב-${format.toUpperCase()} יורד בקרוב`,
-    });
-  };
+    let content = "";
+    const sections: string[] = [];
 
-  const getFormatIcon = (fmt: string) => {
-    switch (fmt) {
-      case 'csv':
-      case 'xlsx':
-        return FileSpreadsheet;
-      case 'pdf':
-        return FileText;
-      case 'json':
-        return FileJson;
-      default:
-        return FileSpreadsheet;
+    if (format === "json") {
+      const exportData: Record<string, unknown> = {};
+      if (includeHoldings) exportData.holdings = holdings;
+      if (includeTransactions) exportData.transactions = transactions;
+      if (includeDividends) exportData.dividends = dividends;
+      content = JSON.stringify(exportData, null, 2);
+    } else {
+      if (includeHoldings && holdings.length > 0) {
+        sections.push("--- Holdings ---\n" + generateCSV(holdings as unknown as Record<string, unknown>[], "holdings"));
+      }
+      if (includeTransactions && transactions.length > 0) {
+        sections.push("--- Transactions ---\n" + generateCSV(transactions as unknown as Record<string, unknown>[], "transactions"));
+      }
+      if (includeDividends && dividends.length > 0) {
+        sections.push("--- Dividends ---\n" + generateCSV(dividends as unknown as Record<string, unknown>[], "dividends"));
+      }
+      content = sections.join("\n\n");
     }
+
+    if (!content) {
+      toast({ variant: "destructive", title: "אין נתונים", description: "אין נתונים לייצוא" });
+      return;
+    }
+
+    const blob = new Blob([content], { type: format === "json" ? "application/json" : "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `portfolio_export.${format === "json" ? "json" : "csv"}`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast({ title: "הקובץ ירד בהצלחה", description: `portfolio_export.${format}` });
   };
 
-  const FormatIcon = getFormatIcon(format);
+  const FormatIcon = format === "json" ? FileJson : FileSpreadsheet;
 
   return (
     <AppLayout>
@@ -51,65 +81,38 @@ export default function Export() {
           <Card>
             <CardHeader>
               <CardTitle>הגדרות ייצוא</CardTitle>
-              <CardDescription>
-                בחר מה לכלול בקובץ ובאיזה פורמט
-              </CardDescription>
+              <CardDescription>בחר מה לכלול בקובץ ובאיזה פורמט</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-3">
                 <Label>פורמט קובץ</Label>
                 <Select value={format} onValueChange={setFormat}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="csv">CSV</SelectItem>
-                    <SelectItem value="xlsx">Excel (XLSX)</SelectItem>
-                    <SelectItem value="pdf">PDF</SelectItem>
                     <SelectItem value="json">JSON</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-3">
                 <Label>תוכן לייצוא</Label>
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2 space-x-reverse">
-                    <Checkbox 
-                      id="holdings" 
-                      checked={includeHoldings}
-                      onCheckedChange={(checked) => setIncludeHoldings(checked === true)}
-                    />
-                    <label htmlFor="holdings" className="text-sm cursor-pointer">
-                      ניירות ערך והחזקות
-                    </label>
+                    <Checkbox id="holdings" checked={includeHoldings} onCheckedChange={(c) => setIncludeHoldings(c === true)} />
+                    <label htmlFor="holdings" className="text-sm cursor-pointer">ניירות ערך ({holdings.length})</label>
                   </div>
                   <div className="flex items-center space-x-2 space-x-reverse">
-                    <Checkbox 
-                      id="transactions" 
-                      checked={includeTransactions}
-                      onCheckedChange={(checked) => setIncludeTransactions(checked === true)}
-                    />
-                    <label htmlFor="transactions" className="text-sm cursor-pointer">
-                      היסטוריית עסקאות
-                    </label>
+                    <Checkbox id="transactions" checked={includeTransactions} onCheckedChange={(c) => setIncludeTransactions(c === true)} />
+                    <label htmlFor="transactions" className="text-sm cursor-pointer">עסקאות ({transactions.length})</label>
                   </div>
                   <div className="flex items-center space-x-2 space-x-reverse">
-                    <Checkbox 
-                      id="dividends" 
-                      checked={includeDividends}
-                      onCheckedChange={(checked) => setIncludeDividends(checked === true)}
-                    />
-                    <label htmlFor="dividends" className="text-sm cursor-pointer">
-                      דיבידנדים
-                    </label>
+                    <Checkbox id="dividends" checked={includeDividends} onCheckedChange={(c) => setIncludeDividends(c === true)} />
+                    <label htmlFor="dividends" className="text-sm cursor-pointer">דיבידנדים ({dividends.length})</label>
                   </div>
                 </div>
               </div>
-
               <Button onClick={handleExport} className="w-full">
-                <Download className="ml-2 h-4 w-4" />
-                ייצא קובץ
+                <Download className="ml-2 h-4 w-4" />ייצא קובץ
               </Button>
             </CardContent>
           </Card>
@@ -117,9 +120,7 @@ export default function Export() {
           <Card>
             <CardHeader>
               <CardTitle>תצוגה מקדימה</CardTitle>
-              <CardDescription>
-                סיכום הקובץ שייווצר
-              </CardDescription>
+              <CardDescription>סיכום הקובץ שייווצר</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
@@ -129,27 +130,8 @@ export default function Export() {
                 <div className="text-center">
                   <p className="font-medium">portfolio_export.{format}</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {[
-                      includeHoldings && "החזקות",
-                      includeTransactions && "עסקאות",
-                      includeDividends && "דיבידנדים",
-                    ].filter(Boolean).join(", ")}
+                    {[includeHoldings && "החזקות", includeTransactions && "עסקאות", includeDividends && "דיבידנדים"].filter(Boolean).join(", ")}
                   </p>
-                </div>
-              </div>
-
-              <div className="border-t pt-4 mt-4">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">פורמט:</span>
-                    <span className="mr-2 font-medium">{format.toUpperCase()}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">סעיפים:</span>
-                    <span className="mr-2 font-medium">
-                      {[includeHoldings, includeTransactions, includeDividends].filter(Boolean).length}
-                    </span>
-                  </div>
                 </div>
               </div>
             </CardContent>
