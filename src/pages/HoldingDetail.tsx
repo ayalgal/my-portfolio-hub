@@ -328,6 +328,105 @@ export default function HoldingDetail() {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* Edit Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent dir="rtl" className="max-w-md">
+            <DialogHeader><DialogTitle>עריכת {holding.name}</DialogTitle></DialogHeader>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              await updateHolding.mutateAsync({
+                id: holding.id,
+                name: fd.get("name") as string,
+                symbol: fd.get("symbol") as string,
+                notes: fd.get("notes") as string || null,
+              });
+              setEditDialogOpen(false);
+            }} className="space-y-4">
+              <div className="space-y-2">
+                <Label>שם</Label>
+                <Input name="name" defaultValue={holding.name} required />
+              </div>
+              <div className="space-y-2">
+                <Label>סימול</Label>
+                <Input name="symbol" defaultValue={holding.symbol} dir="ltr" required />
+              </div>
+              <div className="space-y-2">
+                <Label>הערות</Label>
+                <Input name="notes" defaultValue={holding.notes || ""} />
+              </div>
+              <div className="space-y-2">
+                <Label>קטגוריות</Label>
+                <div className="flex flex-wrap gap-2">
+                  {holdingCats.map(hc => (
+                    <Badge key={hc.id} variant="secondary" className="gap-1" style={{ borderColor: (hc as any).allocation_categories?.color || undefined }}>
+                      {(hc as any).allocation_categories?.name}
+                      <button type="button" onClick={() => removeCategory.mutate(hc.id)} className="hover:text-destructive"><X className="h-3 w-3" /></button>
+                    </Badge>
+                  ))}
+                  {categories.filter(c => !holdingCats.some(hc => hc.category_id === c.id)).map(c => (
+                    <Badge key={c.id} variant="outline" className="cursor-pointer opacity-50 hover:opacity-100" onClick={() => assignCategory.mutate({ holdingId: holding.id, categoryId: c.id })}>
+                      + {c.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <Button type="submit" className="w-full" disabled={updateHolding.isPending}>שמור</Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Buy/Sell Dialog */}
+        <Dialog open={txDialogOpen} onOpenChange={setTxDialogOpen}>
+          <DialogContent dir="rtl" className="max-w-md">
+            <DialogHeader><DialogTitle>{txType === 'buy' ? 'קניית' : 'מכירת'} {holding.symbol}</DialogTitle></DialogHeader>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!user?.id) return;
+              const fd = new FormData(e.currentTarget);
+              const qty = parseFloat(fd.get("quantity") as string) || 0;
+              const price = parseFloat(fd.get("price") as string) || 0;
+              const total = qty * price;
+              const { error } = await supabase.from("transactions").insert({
+                holding_id: holding.id,
+                user_id: user.id,
+                transaction_type: txType,
+                quantity: qty,
+                price,
+                total_amount: total,
+                transaction_date: fd.get("date") as string || new Date().toISOString().split("T")[0],
+                currency: holding.currency || "ILS",
+              });
+              if (error) { toast({ variant: "destructive", title: "שגיאה", description: error.message }); return; }
+              // Update holding quantity & average cost
+              const newQty = txType === 'buy' ? holding.quantity + qty : holding.quantity - qty;
+              const newAvgCost = txType === 'buy' && newQty > 0
+                ? ((holding.quantity * holding.average_cost) + total) / newQty
+                : holding.average_cost;
+              await updateHolding.mutateAsync({ id: holding.id, quantity: newQty, average_cost: newAvgCost });
+              queryClient.invalidateQueries({ queryKey: ["transactions"] });
+              toast({ title: txType === 'buy' ? 'קנייה בוצעה' : 'מכירה בוצעה', description: `${qty} יחידות ב-${getCurrencySymbol(holding.currency || "ILS")}${price}` });
+              setTxDialogOpen(false);
+            }} className="space-y-4">
+              <div className="space-y-2">
+                <Label>תאריך</Label>
+                <Input name="date" type="date" defaultValue={new Date().toISOString().split("T")[0]} dir="ltr" />
+              </div>
+              <div className="space-y-2">
+                <Label>כמות</Label>
+                <Input name="quantity" type="number" step="any" min="0.01" required dir="ltr" />
+              </div>
+              <div className="space-y-2">
+                <Label>מחיר ליחידה ({getCurrencySymbol(holding.currency || "ILS")})</Label>
+                <Input name="price" type="number" step="any" min="0" required dir="ltr" defaultValue={holding.current_price?.toString() || ""} />
+              </div>
+              <Button type="submit" className="w-full" variant={txType === 'buy' ? 'default' : 'destructive'}>
+                {txType === 'buy' ? 'בצע קנייה' : 'בצע מכירה'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </AppLayout>
   );
