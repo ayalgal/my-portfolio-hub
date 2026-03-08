@@ -229,47 +229,6 @@ export default function Dashboard() {
             <Button asChild>
               <Link to="/invest"><Plus className="ml-2 h-4 w-4" />הוסף נייר ערך</Link>
             </Button>
-            
-            {/* Reset Button */}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="outline" size="icon" className="text-destructive hover:text-destructive" title="איפוס נתונים">
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent dir="rtl">
-                <AlertDialogHeader>
-                  <AlertDialogTitle>איפוס כל הנתונים</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    פעולה זו תמחק את כל ההחזקות, העסקאות והדיבידנדים שלך.
-                    <br />
-                    <strong className="text-destructive">פעולה זו בלתי הפיכה!</strong>
-                    <br /><br />
-                    כדי לאשר, הקלד <strong>מחק הכל</strong> בשדה למטה:
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <div className="py-4">
-                  <Label htmlFor="confirm-reset">אישור מחיקה</Label>
-                  <Input
-                    id="confirm-reset"
-                    value={resetConfirmText}
-                    onChange={(e) => setResetConfirmText(e.target.value)}
-                    placeholder='הקלד "מחק הכל"'
-                    className="mt-2"
-                  />
-                </div>
-                <AlertDialogFooter className="flex-row-reverse gap-2">
-                  <AlertDialogCancel>ביטול</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={handleResetData}
-                    disabled={resetConfirmText !== "מחק הכל" || isResetting}
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                  >
-                    {isResetting ? "מוחק..." : "מחק הכל"}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
           </div>
         </div>
 
