@@ -1,9 +1,11 @@
+import { useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowRight, TrendingUp, TrendingDown, DollarSign, Calendar, SplitSquareVertical, Check, X, Loader2 } from "lucide-react";
 import { useHoldings, Holding } from "@/hooks/useHoldings";
 import { useTransactions } from "@/hooks/useTransactions";
@@ -14,6 +16,7 @@ import { usePortfolio } from "@/hooks/usePortfolio";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { getDividendChangeInfo } from "@/components/dividends/DividendChangeArrow";
 
 const getCurrencySymbol = (c: string) => ({ ILS: "₪", USD: "$", CAD: "C$", EUR: "€" }[c] || c);
 
