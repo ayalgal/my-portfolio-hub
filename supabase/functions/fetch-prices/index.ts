@@ -107,6 +107,20 @@ Deno.serve(async (req) => {
 
     if (holdingsError) throw holdingsError;
 
+    // Get earliest transaction date per holding for dividend filtering
+    const { data: txDates } = await supabase
+      .from('transactions')
+      .select('holding_id, transaction_date')
+      .eq('transaction_type', 'buy')
+      .order('transaction_date', { ascending: true });
+
+    const earliestTxDate: Record<string, string> = {};
+    for (const tx of txDates || []) {
+      if (!earliestTxDate[tx.holding_id] || tx.transaction_date < earliestTxDate[tx.holding_id]) {
+        earliestTxDate[tx.holding_id] = tx.transaction_date;
+      }
+    }
+
     let updated = 0;
     let failed = 0;
     let splitsDetected = 0;

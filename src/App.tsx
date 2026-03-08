@@ -53,6 +53,7 @@ const AppRoutes = () => {
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/invest" element={<ProtectedRoute><Invest /></ProtectedRoute>} />
+      <Route path="/holding/:id" element={<ProtectedRoute><HoldingDetail /></ProtectedRoute>} />
       <Route path="/visualize" element={<ProtectedRoute><Visualize /></ProtectedRoute>} />
       <Route path="/allocations" element={<ProtectedRoute><Allocations /></ProtectedRoute>} />
       <Route path="/dividends" element={<ProtectedRoute><Dividends /></ProtectedRoute>} />
