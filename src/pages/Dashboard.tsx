@@ -394,17 +394,32 @@ export default function Dashboard() {
 
             {/* Dividends Chart */}
             <Card>
-              <CardHeader>
-                <CardTitle>דיבידנדים חודשיים</CardTitle>
-                <CardDescription>הכנסות מדיבידנדים</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>דיבידנדים חודשיים</CardTitle>
+                  <CardDescription>הכנסות מדיבידנדים — לחץ על חודש לפירוט</CardDescription>
+                </div>
+                {dividendYears.length > 1 && (
+                  <div className="flex items-center gap-1">
+                    {dividendYears.map(y => (
+                      <Button key={y} variant={y === selectedDivYear ? "default" : "ghost"} size="sm" onClick={() => setSelectedDivYear(y)}>
+                        {y}
+                      </Button>
+                    ))}
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
-                {dividendData.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-12">אין דיבידנדים — לחץ ↻ לעדכון</p>
+                {dividendData.every(d => d.gross === 0) ? (
+                  <p className="text-center text-muted-foreground py-12">אין דיבידנדים ב-{selectedDivYear} — לחץ ↻ לעדכון</p>
                 ) : (
                   <div className="h-[250px]">
                     <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={dividendData}>
+                      <BarChart data={dividendData} onClick={(data) => {
+                        if (data?.activePayload?.[0]?.payload?.monthKey) {
+                          navigate(`/dividends?month=${data.activePayload[0].payload.monthKey}`);
+                        }
+                      }} style={{ cursor: 'pointer' }}>
                         <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                         <XAxis dataKey="month" tick={{ fontSize: 10 }} />
                         <YAxis tickFormatter={(v) => `${currencySymbols[displayCurrency]}${v}`} tick={{ fontSize: 10 }} />

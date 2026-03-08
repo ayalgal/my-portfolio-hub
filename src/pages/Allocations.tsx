@@ -232,17 +232,15 @@ export default function Allocations() {
 
                   return (
                     <Card key={cat.id} className="overflow-hidden">
-                      <div
-                        className="flex items-center justify-between py-4 px-6 cursor-pointer hover:bg-muted/30 transition-colors"
-                        onClick={() => setExpandedCategory(isExpanded ? null : cat.id)}
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: cat.color || "#6b7280" }} />
-                          <div>
-                            <h3 className="font-semibold">{cat.name}</h3>
-                            <p className="text-xs text-muted-foreground">{cat.holdings.length} נכסים</p>
+                        <div className="flex items-center justify-between py-4 px-6 cursor-pointer hover:bg-muted/30 transition-colors"
+                          onClick={() => setExpandedCategory(isExpanded ? null : cat.id)}>
+                          <div className="flex items-center gap-3">
+                            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: cat.color || "#6b7280" }} />
+                            <div>
+                              <button onClick={(e) => { e.stopPropagation(); navigate(`/category/${cat.id}`); }} className="font-semibold hover:underline">{cat.name}</button>
+                              <p className="text-xs text-muted-foreground">{cat.holdings.length} נכסים</p>
+                            </div>
                           </div>
-                        </div>
                         <div className="flex items-center gap-4">
                           <div className="text-left">
                             <p className="font-semibold" dir="ltr">${cat.valueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
