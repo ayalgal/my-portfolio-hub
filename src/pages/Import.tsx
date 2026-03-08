@@ -308,11 +308,12 @@ export default function Import() {
 
     for (const holding of selected) {
       try {
+        // Create holding with zero quantity — transactions will build it up
         const result = await createHolding.mutateAsync({
           symbol: holding.fundNumber || holding.symbol,
           name: holding.name,
-          quantity: holding.totalQuantity,
-          average_cost: holding.weightedAvgCost,
+          quantity: 0,
+          average_cost: 0,
           asset_type: holding.assetType,
           currency: holding.currency,
           portfolio_id: portfolioId,
