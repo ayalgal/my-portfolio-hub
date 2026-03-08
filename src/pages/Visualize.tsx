@@ -5,6 +5,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 import { useHoldings } from "@/hooks/useHoldings";
 import { useDividends } from "@/hooks/useDividends";
 import { useTransactions } from "@/hooks/useTransactions";
+import { useSP500Data, calcSP500Comparison } from "@/hooks/useSP500Data";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
