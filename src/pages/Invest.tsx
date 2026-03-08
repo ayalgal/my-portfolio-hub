@@ -290,9 +290,15 @@ export default function Invest() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
                   <CardTitle>ניירות ערך ({activeHoldings.length})</CardTitle>
-                  <CardDescription>רשימת כל ניירות הערך בפורטפוליו</CardDescription>
+                  <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "category")}>
+                    <TabsList className="h-8">
+                      <TabsTrigger value="list" className="h-6 px-2"><List className="h-3 w-3" /></TabsTrigger>
+                      <TabsTrigger value="category" className="h-6 px-2"><LayoutGrid className="h-3 w-3" /></TabsTrigger>
+                    </TabsList>
+                  </Tabs>
                 </div>
                 <div className="relative w-48">
                   <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
