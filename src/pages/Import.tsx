@@ -2,57 +2,194 @@ import { useState, useCallback } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, HelpCircle } from "lucide-react";
+import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, HelpCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useHoldings } from "@/hooks/useHoldings";
+import { useTransactions } from "@/hooks/useTransactions";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import * as XLSX from "xlsx";
 
-interface ParsedRow {
+interface RawRow {
+  portfolioName: string;
   symbol: string;
   name: string;
-  quantity: number;
-  average_cost: number;
-  asset_type: string;
+  exchange: string;
   currency: string;
+  purchaseDate: string;
+  purchasePrice: number;
+  sellDate: string | null;
+  sellPrice: number | null;
+  shareCount: number;
+  currentPrice: number | null;
+  folder: string;
 }
+
+interface AggregatedHolding {
+  symbol: string;
+  name: string;
+  currency: string;
+  assetType: string;
+  fundNumber: string | null;
+  totalQuantity: number;
+  weightedAvgCost: number;
+  currentPrice: number | null;
+  folder: string;
+  buys: { date: string; price: number; quantity: number }[];
+  sells: { date: string; price: number; quantity: number }[];
+  selected: boolean;
+}
+
+function detectAssetType(row: RawRow): string {
+  // Israeli funds: 7-digit number on TASE
+  if (row.exchange === "TASE" && /^\d{7}$/.test(row.symbol)) return "israeli_fund";
+  if (row.name.toLowerCase().includes("etf") || row.exchange === "ARCX" || row.exchange === "BATS") return "etf";
+  return "stock";
+}
+
+function parseDonatelloXLSX(data: any[][]): RawRow[] {
+  if (data.length < 2) return [];
+  
+  const headers = data[0].map((h: any) => String(h || "").trim());
+  
+  // Map column indices
+  const colMap: Record<string, number> = {};
+  const knownCols: Record<string, string[]> = {
+    portfolioName: ["Portfolio Name"],
+    symbol: ["Symbol"],
+    name: ["Security Name"],
+    exchange: ["Exchange"],
+    currency: ["Currency"],
+    purchaseDate: ["Purchase Date"],
+    purchasePrice: ["Purchase Price"],
+    sellDate: ["Sell Date"],
+    sellPrice: ["Sell Price"],
+    shareCount: ["Share Count"],
+    currentPrice: ["Current Price"],
+    folder: ["Folder"],
+  };
+
+  for (const [key, candidates] of Object.entries(knownCols)) {
+    const idx = headers.findIndex(h => candidates.some(c => h.toLowerCase() === c.toLowerCase()));
+    if (idx >= 0) colMap[key] = idx;
+  }
+
+  if (colMap.symbol === undefined || colMap.shareCount === undefined) return [];
+
+  return data.slice(1).map(row => ({
+    portfolioName: row[colMap.portfolioName] || "",
+    symbol: String(row[colMap.symbol] || "").trim(),
+    name: String(row[colMap.name] || row[colMap.symbol] || "").trim(),
+    exchange: String(row[colMap.exchange] || "").trim(),
+    currency: String(row[colMap.currency] || "USD").trim(),
+    purchaseDate: row[colMap.purchaseDate] ? String(row[colMap.purchaseDate]) : "",
+    purchasePrice: parseFloat(row[colMap.purchasePrice]) || 0,
+    sellDate: row[colMap.sellDate] ? String(row[colMap.sellDate]) : null,
+    sellPrice: row[colMap.sellPrice] ? parseFloat(row[colMap.sellPrice]) : null,
+    shareCount: parseFloat(row[colMap.shareCount]) || 0,
+    currentPrice: row[colMap.currentPrice] ? parseFloat(row[colMap.currentPrice]) : null,
+    folder: String(row[colMap.folder] || "").trim(),
+  })).filter(r => r.symbol && r.shareCount > 0);
+}
+
+function aggregateRows(rows: RawRow[]): AggregatedHolding[] {
+  const grouped: Record<string, RawRow[]> = {};
+  
+  for (const row of rows) {
+    if (!grouped[row.symbol]) grouped[row.symbol] = [];
+    grouped[row.symbol].push(row);
+  }
+
+  return Object.entries(grouped).map(([symbol, symbolRows]) => {
+    const first = symbolRows[0];
+    const assetType = detectAssetType(first);
+    
+    // Separate buys (no sell date) and sells (has sell date)
+    const buys: { date: string; price: number; quantity: number }[] = [];
+    const sells: { date: string; price: number; quantity: number }[] = [];
+    
+    for (const row of symbolRows) {
+      if (row.sellDate && row.sellPrice) {
+        sells.push({ date: row.sellDate, price: row.sellPrice, quantity: row.shareCount });
+      }
+      // Always record the buy
+      buys.push({ date: row.purchaseDate, price: row.purchasePrice, quantity: row.shareCount });
+    }
+
+    // Calculate active holdings: buys without sells
+    const activeBuys = symbolRows.filter(r => !r.sellDate || !r.sellPrice);
+    const totalQuantity = activeBuys.reduce((sum, r) => sum + r.shareCount, 0);
+    const totalCost = activeBuys.reduce((sum, r) => sum + r.shareCount * r.purchasePrice, 0);
+    const weightedAvgCost = totalQuantity > 0 ? totalCost / totalQuantity : 0;
+
+    return {
+      symbol,
+      name: first.name,
+      currency: first.currency,
+      assetType,
+      fundNumber: assetType === "israeli_fund" ? symbol : null,
+      totalQuantity,
+      weightedAvgCost,
+      currentPrice: first.currentPrice,
+      folder: first.folder,
+      buys,
+      sells,
+      selected: totalQuantity > 0, // Pre-select only active holdings
+    };
+  });
+}
+
+function parseCSV(text: string): AggregatedHolding[] {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2) return [];
+  
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
+  const symbolIdx = headers.findIndex(h => ['symbol', 'סימול', 'ticker'].includes(h));
+  const nameIdx = headers.findIndex(h => ['name', 'שם', 'security name'].includes(h));
+  const qtyIdx = headers.findIndex(h => ['quantity', 'כמות', 'shares', 'share count'].includes(h));
+  const costIdx = headers.findIndex(h => ['average_cost', 'cost', 'price', 'purchase price', 'מחיר', 'עלות'].includes(h));
+  const currIdx = headers.findIndex(h => ['currency', 'מטבע'].includes(h));
+
+  if (symbolIdx === -1 || qtyIdx === -1) return [];
+
+  return lines.slice(1).map(line => {
+    const cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
+    const symbol = cols[symbolIdx] || '';
+    const qty = parseFloat(cols[qtyIdx]) || 0;
+    const cost = costIdx >= 0 ? parseFloat(cols[costIdx]) || 0 : 0;
+    return {
+      symbol,
+      name: nameIdx >= 0 ? cols[nameIdx] : symbol,
+      currency: currIdx >= 0 ? cols[currIdx] : 'USD',
+      assetType: /^\d{7}$/.test(symbol) ? 'israeli_fund' : 'stock',
+      fundNumber: /^\d{7}$/.test(symbol) ? symbol : null,
+      totalQuantity: qty,
+      weightedAvgCost: cost,
+      currentPrice: null,
+      folder: '',
+      buys: [{ date: '', price: cost, quantity: qty }],
+      sells: [],
+      selected: qty > 0,
+    };
+  }).filter(r => r.symbol && r.totalQuantity > 0);
+}
+
+const getCurrencySymbol = (c: string) => ({ ILS: "₪", USD: "$", CAD: "C$", EUR: "€" }[c] || c);
 
 export default function Import() {
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<'idle' | 'parsed' | 'error' | 'importing' | 'done'>('idle');
-  const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
+  const [aggregated, setAggregated] = useState<AggregatedHolding[]>([]);
   const { toast } = useToast();
   const { portfolios } = usePortfolio();
   const { createHolding } = useHoldings();
+  const { createTransaction } = useTransactions();
 
-  const parseCSV = (text: string): ParsedRow[] => {
-    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-    if (lines.length < 2) return [];
-    
-    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, '').toLowerCase());
-    
-    // Try to auto-detect columns
-    const symbolIdx = headers.findIndex(h => ['symbol', 'סימול', 'ticker', 'סימבול'].includes(h));
-    const nameIdx = headers.findIndex(h => ['name', 'שם', 'company', 'חברה', 'שם נייר'].includes(h));
-    const qtyIdx = headers.findIndex(h => ['quantity', 'כמות', 'shares', 'qty', 'יחידות'].includes(h));
-    const costIdx = headers.findIndex(h => ['average_cost', 'cost', 'price', 'מחיר', 'עלות', 'עלות ממוצעת', 'שער'].includes(h));
-    const currIdx = headers.findIndex(h => ['currency', 'מטבע', 'curr'].includes(h));
-    const typeIdx = headers.findIndex(h => ['type', 'asset_type', 'סוג', 'סוג נכס'].includes(h));
-
-    if (symbolIdx === -1 || qtyIdx === -1) return [];
-
-    return lines.slice(1).map(line => {
-      const cols = line.split(',').map(c => c.trim().replace(/"/g, ''));
-      return {
-        symbol: cols[symbolIdx] || '',
-        name: nameIdx >= 0 ? cols[nameIdx] : cols[symbolIdx],
-        quantity: parseFloat(cols[qtyIdx]) || 0,
-        average_cost: costIdx >= 0 ? (parseFloat(cols[costIdx]) || 0) : 0,
-        currency: currIdx >= 0 ? cols[currIdx] : 'ILS',
-        asset_type: typeIdx >= 0 ? cols[typeIdx] : 'stock',
-      };
-    }).filter(r => r.symbol && r.quantity > 0);
+  const toggleSelect = (symbol: string) => {
+    setAggregated(prev => prev.map(h => h.symbol === symbol ? { ...h, selected: !h.selected } : h));
   };
 
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setIsDragging(true); }, []);
@@ -71,47 +208,82 @@ export default function Import() {
   };
 
   const processFile = (file: File) => {
-    if (!file.name.endsWith('.csv') && !file.type.includes('csv')) {
-      toast({ variant: "destructive", title: "קובץ לא נתמך", description: "כרגע נתמך רק CSV" });
+    const isXLSX = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+    const isCSV = file.name.endsWith('.csv') || file.type.includes('csv');
+
+    if (!isXLSX && !isCSV) {
+      toast({ variant: "destructive", title: "קובץ לא נתמך", description: "נתמכים: XLSX, XLS, CSV" });
       setStatus('error');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target?.result as string;
-      const rows = parseCSV(text);
-      if (rows.length === 0) {
-        toast({ variant: "destructive", title: "שגיאה בקריאת הקובץ", description: "לא נמצאו שורות תקינות. ודא שהקובץ מכיל עמודות symbol וquantity" });
+      try {
+        let holdings: AggregatedHolding[];
+
+        if (isXLSX) {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+          const rawRows = parseDonatelloXLSX(jsonData);
+          holdings = aggregateRows(rawRows);
+        } else {
+          const text = e.target?.result as string;
+          holdings = parseCSV(text);
+        }
+
+        if (holdings.length === 0) {
+          toast({ variant: "destructive", title: "לא נמצאו נתונים", description: "ודא שהקובץ בפורמט הנכון" });
+          setStatus('error');
+          return;
+        }
+
+        setAggregated(holdings);
+        setFile(file);
+        setStatus('parsed');
+        
+        const activeCount = holdings.filter(h => h.totalQuantity > 0).length;
+        const soldCount = holdings.filter(h => h.totalQuantity === 0).length;
+        toast({
+          title: `נמצאו ${holdings.length} ניירות ערך`,
+          description: `${activeCount} פעילים${soldCount > 0 ? `, ${soldCount} נמכרו` : ''}`,
+        });
+      } catch (err) {
+        console.error('Parse error:', err);
+        toast({ variant: "destructive", title: "שגיאה בקריאת הקובץ", description: "הקובץ לא תקין" });
         setStatus('error');
-        return;
       }
-      setParsedRows(rows);
-      setFile(file);
-      setStatus('parsed');
-      toast({ title: `נמצאו ${rows.length} שורות`, description: "בדוק את הנתונים ולחץ ייבא" });
     };
-    reader.readAsText(file);
+
+    if (isXLSX) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
   };
 
   const handleImport = async () => {
     const portfolioId = portfolios?.[0]?.id;
-    if (!portfolioId || parsedRows.length === 0) return;
+    if (!portfolioId) return;
+
+    const selected = aggregated.filter(h => h.selected && h.totalQuantity > 0);
+    if (selected.length === 0) return;
 
     setStatus('importing');
     let success = 0;
     let failed = 0;
 
-    for (const row of parsedRows) {
+    for (const holding of selected) {
       try {
         await createHolding.mutateAsync({
-          symbol: row.symbol,
-          name: row.name,
-          quantity: row.quantity,
-          average_cost: row.average_cost,
-          asset_type: row.asset_type,
-          currency: row.currency,
+          symbol: holding.fundNumber || holding.symbol,
+          name: holding.name,
+          quantity: holding.totalQuantity,
+          average_cost: holding.weightedAvgCost,
+          asset_type: holding.assetType,
+          currency: holding.currency,
           portfolio_id: portfolioId,
+          fund_number: holding.fundNumber,
+          current_price: holding.currentPrice,
         });
         success++;
       } catch {
@@ -126,12 +298,16 @@ export default function Import() {
     });
   };
 
+  const selectedCount = aggregated.filter(h => h.selected).length;
+  const activeHoldings = aggregated.filter(h => h.totalQuantity > 0);
+  const soldHoldings = aggregated.filter(h => h.totalQuantity === 0);
+
   return (
     <AppLayout>
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold">ייבוא נתונים</h1>
-          <p className="text-muted-foreground">ייבא נתוני פורטפוליו מקובץ CSV</p>
+          <p className="text-muted-foreground">ייבא נתוני פורטפוליו מקובץ XLSX או CSV</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -139,7 +315,7 @@ export default function Import() {
             <Card>
               <CardHeader>
                 <CardTitle>העלה קובץ</CardTitle>
-                <CardDescription>גרור קובץ CSV לכאן, או לחץ לבחירת קובץ</CardDescription>
+                <CardDescription>גרור קובץ XLSX / CSV לכאן, או לחץ לבחירת קובץ</CardDescription>
               </CardHeader>
               <CardContent>
                 <div
@@ -148,34 +324,39 @@ export default function Import() {
                   onDrop={handleDrop}
                   className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors
                     ${isDragging ? 'border-primary bg-primary/5' : 'border-muted-foreground/25'}
-                    ${status === 'parsed' || status === 'done' ? 'border-green-500 bg-green-500/5' : ''}
-                    ${status === 'error' ? 'border-red-500 bg-red-500/5' : ''}
+                    ${status === 'parsed' || status === 'done' ? 'border-primary bg-primary/5' : ''}
+                    ${status === 'error' ? 'border-destructive bg-destructive/5' : ''}
                   `}
                 >
                   {status === 'parsed' && file ? (
                     <div className="space-y-4">
-                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
+                      <CheckCircle className="w-12 h-12 text-primary mx-auto" />
                       <div>
                         <p className="font-medium">{file.name}</p>
-                        <p className="text-sm text-muted-foreground">{parsedRows.length} שורות נמצאו</p>
+                        <p className="text-sm text-muted-foreground">
+                          {activeHoldings.length} ניירות ערך פעילים
+                          {soldHoldings.length > 0 && `, ${soldHoldings.length} נמכרו`}
+                        </p>
                       </div>
-                      <Button onClick={handleImport}>ייבא {parsedRows.length} ניירות ערך</Button>
+                      <Button onClick={handleImport} disabled={selectedCount === 0}>
+                        ייבא {selectedCount} ניירות ערך נבחרים
+                      </Button>
                     </div>
                   ) : status === 'importing' ? (
                     <div className="space-y-4">
-                      <Upload className="w-12 h-12 text-primary mx-auto animate-pulse" />
+                      <Loader2 className="w-12 h-12 text-primary mx-auto animate-spin" />
                       <p className="font-medium">מייבא נתונים...</p>
                     </div>
                   ) : status === 'done' ? (
                     <div className="space-y-4">
-                      <CheckCircle className="w-12 h-12 text-green-500 mx-auto" />
-                      <p className="font-medium text-green-500">ייבוא הושלם בהצלחה!</p>
-                      <Button variant="outline" onClick={() => { setStatus('idle'); setParsedRows([]); setFile(null); }}>ייבא קובץ נוסף</Button>
+                      <CheckCircle className="w-12 h-12 text-primary mx-auto" />
+                      <p className="font-medium text-primary">ייבוא הושלם בהצלחה!</p>
+                      <Button variant="outline" onClick={() => { setStatus('idle'); setAggregated([]); setFile(null); }}>ייבא קובץ נוסף</Button>
                     </div>
                   ) : status === 'error' ? (
                     <div className="space-y-4">
-                      <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
-                      <p className="text-red-500">שגיאה בטעינת הקובץ</p>
+                      <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
+                      <p className="text-destructive">שגיאה בטעינת הקובץ</p>
                       <Button variant="outline" onClick={() => setStatus('idle')}>נסה שוב</Button>
                     </div>
                   ) : (
@@ -183,9 +364,9 @@ export default function Import() {
                       <Upload className="w-12 h-12 text-muted-foreground mx-auto" />
                       <div>
                         <p className="font-medium">גרור קובץ לכאן</p>
-                        <p className="text-sm text-muted-foreground">או לחץ לבחירת קובץ</p>
+                        <p className="text-sm text-muted-foreground">XLSX, XLS, CSV</p>
                       </div>
-                      <input type="file" accept=".csv" onChange={handleFileChange} className="hidden" id="file-upload" />
+                      <input type="file" accept=".xlsx,.xls,.csv" onChange={handleFileChange} className="hidden" id="file-upload" />
                       <Button variant="outline" asChild>
                         <label htmlFor="file-upload" className="cursor-pointer">בחר קובץ</label>
                       </Button>
@@ -195,80 +376,128 @@ export default function Import() {
               </CardContent>
             </Card>
 
-            {parsedRows.length > 0 && status === 'parsed' && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>תצוגה מקדימה ({parsedRows.length} שורות)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">סימול</TableHead>
-                        <TableHead className="text-right">שם</TableHead>
-                        <TableHead className="text-right">כמות</TableHead>
-                        <TableHead className="text-right">עלות</TableHead>
-                        <TableHead className="text-right">מטבע</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {parsedRows.slice(0, 10).map((row, i) => (
-                        <TableRow key={i}>
-                          <TableCell dir="ltr" className="font-medium">{row.symbol}</TableCell>
-                          <TableCell>{row.name}</TableCell>
-                          <TableCell dir="ltr">{row.quantity}</TableCell>
-                          <TableCell dir="ltr">{row.average_cost}</TableCell>
-                          <TableCell>{row.currency}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  {parsedRows.length > 10 && (
-                    <p className="text-sm text-muted-foreground mt-2 text-center">ועוד {parsedRows.length - 10} שורות...</p>
-                  )}
-                </CardContent>
-              </Card>
+            {aggregated.length > 0 && status === 'parsed' && (
+              <>
+                {activeHoldings.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>החזקות פעילות ({activeHoldings.length})</CardTitle>
+                      <CardDescription>בחר אילו ניירות ערך לייבא</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-[50px]"></TableHead>
+                            <TableHead className="text-right">סימול</TableHead>
+                            <TableHead className="text-right">שם</TableHead>
+                            <TableHead className="text-right">סוג</TableHead>
+                            <TableHead className="text-right">כמות</TableHead>
+                            <TableHead className="text-right">עלות ממוצעת</TableHead>
+                            <TableHead className="text-right">מטבע</TableHead>
+                            <TableHead className="text-right">תיקייה</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {activeHoldings.map((h) => (
+                            <TableRow key={h.symbol} className={h.selected ? '' : 'opacity-50'}>
+                              <TableCell>
+                                <Checkbox
+                                  checked={h.selected}
+                                  onCheckedChange={() => toggleSelect(h.symbol)}
+                                />
+                              </TableCell>
+                              <TableCell dir="ltr" className="font-medium">{h.symbol}</TableCell>
+                              <TableCell className="max-w-[200px] truncate">{h.name}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline">
+                                  {h.assetType === 'israeli_fund' ? 'קרן כספית' : h.assetType === 'etf' ? 'ETF' : 'מניה'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell dir="ltr">{h.totalQuantity.toLocaleString(undefined, { maximumFractionDigits: 2 })}</TableCell>
+                              <TableCell dir="ltr">{getCurrencySymbol(h.currency)}{h.weightedAvgCost.toFixed(2)}</TableCell>
+                              <TableCell>{h.currency}</TableCell>
+                              <TableCell>{h.folder}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {soldHoldings.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-muted-foreground">נמכרו ({soldHoldings.length})</CardTitle>
+                      <CardDescription>ניירות ערך שנמכרו במלואם — לא ייובאו</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-right">סימול</TableHead>
+                            <TableHead className="text-right">שם</TableHead>
+                            <TableHead className="text-right">קניות</TableHead>
+                            <TableHead className="text-right">מכירות</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {soldHoldings.map((h) => (
+                            <TableRow key={h.symbol} className="opacity-50">
+                              <TableCell dir="ltr" className="font-medium">{h.symbol}</TableCell>
+                              <TableCell className="max-w-[200px] truncate">{h.name}</TableCell>
+                              <TableCell dir="ltr">{h.buys.length}</TableCell>
+                              <TableCell dir="ltr">{h.sells.length}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
             )}
           </div>
 
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><HelpCircle className="w-5 h-5" />איך לייבא?</CardTitle>
+                <CardTitle className="flex items-center gap-2"><HelpCircle className="w-5 h-5" />פורמטים נתמכים</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-sm">
                 <div className="space-y-2">
-                  <p className="font-medium">1. פורמט הקובץ</p>
-                  <p className="text-muted-foreground">CSV עם עמודות: symbol, name, quantity, cost, currency</p>
+                  <p className="font-medium flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4" />
+                    Donatello Export (XLSX)
+                  </p>
+                  <p className="text-muted-foreground">
+                    ייצוא ישיר מ-Donatello. כולל זיהוי אוטומטי של קרנות כספיות, חישוב עלות ממוצעת משוקללת, וזיהוי מכירות.
+                  </p>
                 </div>
                 <div className="space-y-2">
-                  <p className="font-medium">2. דוגמה</p>
-                  <pre className="text-xs bg-muted p-2 rounded" dir="ltr">
-{`symbol,name,quantity,cost,currency
-AAPL,Apple Inc.,10,150.00,USD
-POLI,בנק הפועלים,500,30.50,ILS`}
-                  </pre>
-                </div>
-                <div className="space-y-2">
-                  <p className="font-medium">3. העלה ובדוק</p>
-                  <p className="text-muted-foreground">גרור את הקובץ, בדוק את הנתונים ולחץ ייבא</p>
+                  <p className="font-medium flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4" />
+                    CSV
+                  </p>
+                  <p className="text-muted-foreground">
+                    עמודות: symbol, name, quantity, cost, currency
+                  </p>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2"><FileSpreadsheet className="w-5 h-5" />עמודות נתמכות</CardTitle>
+                <CardTitle className="flex items-center gap-2"><FileSpreadsheet className="w-5 h-5" />מה מיובא?</CardTitle>
               </CardHeader>
-              <CardContent>
-                <ul className="space-y-1 text-sm text-muted-foreground">
-                  <li>symbol / סימול (חובה)</li>
-                  <li>name / שם</li>
-                  <li>quantity / כמות (חובה)</li>
-                  <li>cost / עלות / מחיר</li>
-                  <li>currency / מטבע</li>
-                  <li>type / סוג נכס</li>
-                </ul>
+              <CardContent className="space-y-2 text-sm text-muted-foreground">
+                <p>✅ סימול, שם ונתוני קנייה</p>
+                <p>✅ מספר קרן לקרנות ישראליות</p>
+                <p>✅ חישוב עלות ממוצעת משוקללת</p>
+                <p>✅ סוג נכס (מניה, ETF, קרן כספית)</p>
+                <p>✅ מטבע (USD / ILS)</p>
+                <p>⚪ ניירות שנמכרו לא מיובאים</p>
               </CardContent>
             </Card>
           </div>
