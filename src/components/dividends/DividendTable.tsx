@@ -155,8 +155,10 @@ function DividendRow({ d, prevMap }: { d: DividendWithHolding; prevMap: Map<stri
     <TableRow>
       <TableCell dir="ltr">{d.payment_date ? new Date(d.payment_date).toLocaleDateString("he-IL") : "-"}</TableCell>
       <TableCell>
-        <span className="font-medium" dir="ltr">{d.holdings?.symbol || "-"}</span>
-        {d.holdings?.name && <span className="text-xs text-muted-foreground mr-1">({d.holdings.name})</span>}
+        <Link to={`/holding/${d.holding_id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+          <span className="font-medium" dir="ltr">{d.holdings?.symbol || "-"}</span>
+          {d.holdings?.name && <span className="text-xs text-muted-foreground mr-1">({d.holdings.name})</span>}
+        </Link>
       </TableCell>
       <TableCell dir="ltr" className="font-semibold text-green-500">{cs}{d.amount.toLocaleString()}</TableCell>
       <TableCell className="text-center">
