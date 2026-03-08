@@ -54,7 +54,7 @@ export default function Invest() {
   };
 
   const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { ILS: "₪", USD: "$", EUR: "€" };
+    const symbols: Record<string, string> = { ILS: "₪", USD: "$", CAD: "C$", EUR: "€" };
     return symbols[currency || "ILS"] || currency;
   };
 
