@@ -1,17 +1,21 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { TrendingUp, TrendingDown, Wallet, PieChart, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw } from "lucide-react";
-import { Link } from "react-router-dom";
+import { TrendingUp, TrendingDown, Wallet, PieChart as PieChartIcon, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { useHoldings } from "@/hooks/useHoldings";
 import { useDividends } from "@/hooks/useDividends";
 import { useProfile } from "@/hooks/useProfile";
 import { useExchangeRates } from "@/hooks/useExchangeRates";
+import { useAllocations } from "@/hooks/useAllocations";
+import { useHoldingCategories } from "@/hooks/useHoldingCategories";
+import { usePortfolio } from "@/hooks/usePortfolio";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 type DisplayCurrency = 'ILS' | 'USD' | 'CAD';
 
@@ -21,14 +25,21 @@ const currencySymbols: Record<DisplayCurrency, string> = {
   CAD: 'C$',
 };
 
+const getCurrencySymbol = (c: string) => ({ ILS: "₪", USD: "$", CAD: "C$", EUR: "€" }[c] || c);
+
 export default function Dashboard() {
   const { holdings, isLoading: holdingsLoading } = useHoldings();
   const { dividends, isLoading: dividendsLoading } = useDividends();
   const { profile } = useProfile();
   const { convertToILS, convertFromILS, rates, isLoading: ratesLoading } = useExchangeRates();
+  const { categories } = useAllocations();
+  const { holdingCategories } = useHoldingCategories();
+  const { portfolios } = usePortfolio();
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('ILS');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const isLoading = holdingsLoading || dividendsLoading || ratesLoading;
 
@@ -57,8 +68,33 @@ export default function Dashboard() {
   }, 0);
 
   const displayName = profile?.display_name || "";
-
   const hasCurrentPrices = holdings.some(h => h.current_price !== null);
+
+  // Allocation data
+  const getCategoryHoldings = (categoryId: string) => {
+    const linkedIds = holdingCategories.filter(hc => hc.category_id === categoryId).map(hc => hc.holding_id);
+    return holdings.filter(h => linkedIds.includes(h.id));
+  };
+
+  const getHoldingValueUSD = (h: any) => {
+    const val = h.quantity * (h.current_price ?? h.average_cost);
+    return convertFromILS(convertToILS(val, h.currency || "ILS"), "USD");
+  };
+
+  const totalPortfolioUSD = holdings.reduce((sum, h) => sum + getHoldingValueUSD(h), 0);
+
+  const categoryData = categories.map((cat) => {
+    const catHoldings = getCategoryHoldings(cat.id);
+    const valueUSD = catHoldings.reduce((s, h) => s + getHoldingValueUSD(h), 0);
+    const actualPct = totalPortfolioUSD > 0 ? (valueUSD / totalPortfolioUSD) * 100 : 0;
+    return { ...cat, holdings: catHoldings, valueUSD, actualPct };
+  }).filter(c => c.valueUSD > 0);
+
+  const pieData = categoryData.map(c => ({
+    name: c.name,
+    value: c.valueUSD,
+    color: c.color || "#8b5cf6",
+  }));
 
   const handleRefreshPrices = async () => {
     setIsRefreshing(true);
@@ -66,7 +102,6 @@ export default function Dashboard() {
       const { error } = await supabase.functions.invoke('fetch-prices');
       if (error) throw error;
       toast({ title: "מחירים עודכנו", description: "המחירים עודכנו בהצלחה" });
-      // Refetch data
       window.location.reload();
     } catch {
       toast({ variant: "destructive", title: "שגיאה", description: "לא ניתן לעדכן מחירים" });
@@ -160,7 +195,7 @@ export default function Dashboard() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">ניירות ערך</CardTitle>
-              <PieChart className="h-4 w-4 text-muted-foreground" />
+              <PieChartIcon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               {isLoading ? <Skeleton className="h-8 w-24" /> : (
@@ -172,6 +207,87 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Allocation Pie Chart Section */}
+        {holdings.length > 0 && categoryData.length > 0 && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>הקצאות</CardTitle>
+                <CardDescription>התפלגות הפורטפוליו לפי תיקיות</CardDescription>
+              </div>
+              <Button variant="outline" size="sm" asChild>
+                <Link to="/allocations"><ExternalLink className="ml-2 h-3 w-3" />ניהול מלא</Link>
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Pie Chart */}
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        dataKey="value"
+                        nameKey="name"
+                        stroke="none"
+                      >
+                        {pieData.map((entry, idx) => (
+                          <Cell key={idx} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: number) => [`$${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`, 'שווי']}
+                        contentStyle={{ direction: 'rtl' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Category List */}
+                <div className="space-y-2">
+                  {categoryData.map((cat) => (
+                    <div key={cat.id}>
+                      <button
+                        className="w-full flex items-center justify-between p-3 rounded-lg hover:bg-muted/50 transition-colors text-right"
+                        onClick={() => setExpandedCategory(expandedCategory === cat.id ? null : cat.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color || "#8b5cf6" }} />
+                          <span className="font-medium">{cat.name}</span>
+                          <span className="text-xs text-muted-foreground">({cat.holdings.length})</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-semibold" dir="ltr">${cat.valueUSD.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                          <span className="text-xs text-muted-foreground">{cat.actualPct.toFixed(1)}%</span>
+                          {expandedCategory === cat.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </div>
+                      </button>
+                      {expandedCategory === cat.id && (
+                        <div className="mr-6 space-y-1 pb-2">
+                          {cat.holdings.map(h => (
+                            <button
+                              key={h.id}
+                              className="w-full flex items-center justify-between px-3 py-2 rounded hover:bg-muted/30 text-sm text-right"
+                              onClick={() => navigate(`/holding/${h.id}`)}
+                            >
+                              <span>{h.name} <span className="text-muted-foreground">({h.symbol})</span></span>
+                              <span dir="ltr" className="text-muted-foreground">${getHoldingValueUSD(h).toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {holdings.length === 0 && !isLoading && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
