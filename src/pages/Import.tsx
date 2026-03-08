@@ -353,6 +353,21 @@ export default function Import() {
           }
         }
 
+        // Assign category based on folder name from Donatello
+        if (holding.folder && user?.id) {
+          try {
+            let cat = categories.find(c => c.name === holding.folder);
+            if (!cat) {
+              cat = await createCategory.mutateAsync({ name: holding.folder });
+            }
+            if (cat) {
+              await assignCategory.mutateAsync({ holdingId: result.id, categoryId: cat.id });
+            }
+          } catch {
+            // Category assignment is best-effort
+          }
+        }
+
         success++;
       } catch {
         failed++;
