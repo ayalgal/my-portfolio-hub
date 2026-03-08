@@ -7,28 +7,48 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, TrendingUp, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Plus, TrendingUp, MoreHorizontal, Trash2, Tag, X } from "lucide-react";
 import { SplitAlerts } from "@/components/SplitAlerts";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { useHoldings } from "@/hooks/useHoldings";
 import { usePortfolio } from "@/hooks/usePortfolio";
+import { useAllocations } from "@/hooks/useAllocations";
+import { useHoldingCategories } from "@/hooks/useHoldingCategories";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useToast } from "@/hooks/use-toast";
 
 type AssetType = 'stock' | 'etf' | 'mutual_fund' | 'israeli_fund';
+
+const PRESET_CATEGORIES = [
+  { name: "דיבידנד קלאסי", color: "#22c55e" },
+  { name: "אולטרא דיבידנד", color: "#f97316" },
+  { name: "צמיחה", color: "#3b82f6" },
+  { name: "ביטחונות", color: "#6b7280" },
+  { name: "החזקות", color: "#8b5cf6" },
+  { name: "קריפטו", color: "#eab308" },
+  { name: "סקטור טכנולוגיה", color: "#06b6d4" },
+  { name: "סקטור בריאות", color: "#ec4899" },
+  { name: "סקטור אנרגיה", color: "#ef4444" },
+  { name: "סקטור פיננסי", color: "#14b8a6" },
+];
 
 export default function Invest() {
   const [selectedAssetType, setSelectedAssetType] = useState("stock");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
   const { portfolios } = usePortfolio();
   const defaultPortfolioId = portfolios?.[0]?.id;
   const { holdings, isLoading, createHolding, deleteHolding } = useHoldings(defaultPortfolioId);
+  const { categories, createCategory } = useAllocations();
+  const { holdingCategories, assignCategory, removeCategory, getCategoriesForHolding } = useHoldingCategories();
+  const { toast } = useToast();
 
   const handleAddHolding = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!defaultPortfolioId) return;
-    
     const formData = new FormData(e.currentTarget);
-    
     const fundNumber = formData.get("fundNumber") as string;
     createHolding.mutate({
       symbol: fundNumber || (formData.get("symbol") as string),
@@ -44,12 +64,27 @@ export default function Invest() {
     });
   };
 
+  const handleAssignCategory = async (holdingId: string, categoryId: string) => {
+    const existing = getCategoriesForHolding(holdingId);
+    if (existing.some(hc => hc.category_id === categoryId)) return;
+    assignCategory.mutate({ holdingId, categoryId });
+  };
+
+  const handleCreateAndAssign = async (holdingId: string, name: string, color: string) => {
+    try {
+      const result = await createCategory.mutateAsync({ name, color });
+      assignCategory.mutate({ holdingId, categoryId: result.id });
+    } catch {
+      toast({ variant: "destructive", title: "שגיאה", description: "לא ניתן ליצור קטגוריה" });
+    }
+  };
+
   const getAssetTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
       stock: "מניה",
       etf: "ETF",
       mutual_fund: "קרן נאמנות",
-      israeli_fund: "קרן כספית ישראלית",
+      israeli_fund: "קרן כספית",
     };
     return labels[type] || type;
   };
@@ -136,7 +171,7 @@ export default function Invest() {
                 </Button>
               </form>
             </DialogContent>
-        </Dialog>
+          </Dialog>
         </div>
 
         <SplitAlerts />
@@ -167,6 +202,7 @@ export default function Invest() {
                     <TableHead className="text-right">סימול</TableHead>
                     <TableHead className="text-right">שם</TableHead>
                     <TableHead className="text-right">סוג</TableHead>
+                    <TableHead className="text-right">קטגוריות</TableHead>
                     <TableHead className="text-right">כמות</TableHead>
                     <TableHead className="text-right">עלות ממוצעת</TableHead>
                     <TableHead className="text-right">מחיר נוכחי</TableHead>
@@ -183,6 +219,8 @@ export default function Invest() {
                     const pnl = totalValue - totalCost;
                     const pnlPercent = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
                     const currencySymbol = getCurrencySymbol(holding.currency || "ILS");
+                    const holdingCats = getCategoriesForHolding(holding.id);
+                    
                     return (
                       <TableRow key={holding.id}>
                         <TableCell className="font-medium" dir="ltr">
@@ -190,6 +228,81 @@ export default function Invest() {
                         </TableCell>
                         <TableCell>{holding.name}</TableCell>
                         <TableCell>{getAssetTypeLabel(holding.asset_type)}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {holdingCats.map((hc) => (
+                              <Badge
+                                key={hc.id}
+                                variant="outline"
+                                className="text-xs cursor-pointer group"
+                                style={{ borderColor: (hc as any).allocation_categories?.color || undefined, color: (hc as any).allocation_categories?.color || undefined }}
+                                onClick={() => removeCategory.mutate(hc.id)}
+                              >
+                                {(hc as any).allocation_categories?.name}
+                                <X className="h-3 w-3 mr-1 opacity-0 group-hover:opacity-100 transition-opacity" />
+                              </Badge>
+                            ))}
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-5 w-5">
+                                  <Tag className="h-3 w-3" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-56 p-2" dir="rtl" align="start">
+                                <div className="space-y-1">
+                                  <p className="text-xs font-medium text-muted-foreground px-2 py-1">קטגוריות קיימות</p>
+                                  {categories.map(cat => (
+                                    <button
+                                      key={cat.id}
+                                      className="w-full text-right px-2 py-1.5 text-sm rounded hover:bg-muted flex items-center gap-2"
+                                      onClick={() => handleAssignCategory(holding.id, cat.id)}
+                                    >
+                                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color || '#6b7280' }} />
+                                      {cat.name}
+                                    </button>
+                                  ))}
+                                  <div className="border-t my-1" />
+                                  <p className="text-xs font-medium text-muted-foreground px-2 py-1">הוסף חדשה</p>
+                                  {PRESET_CATEGORIES
+                                    .filter(p => !categories.some(c => c.name === p.name))
+                                    .slice(0, 5)
+                                    .map(preset => (
+                                      <button
+                                        key={preset.name}
+                                        className="w-full text-right px-2 py-1.5 text-sm rounded hover:bg-muted flex items-center gap-2"
+                                        onClick={() => handleCreateAndAssign(holding.id, preset.name, preset.color)}
+                                      >
+                                        <Plus className="h-3 w-3" />
+                                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: preset.color }} />
+                                        {preset.name}
+                                      </button>
+                                    ))
+                                  }
+                                  <div className="flex gap-1 mt-1">
+                                    <Input
+                                      placeholder="שם קטגוריה..."
+                                      value={newCategoryName}
+                                      onChange={e => setNewCategoryName(e.target.value)}
+                                      className="h-7 text-xs"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2"
+                                      disabled={!newCategoryName.trim()}
+                                      onClick={() => {
+                                        handleCreateAndAssign(holding.id, newCategoryName.trim(), '#6b7280');
+                                        setNewCategoryName("");
+                                      }}
+                                    >
+                                      <Plus className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                        </TableCell>
                         <TableCell dir="ltr">{holding.quantity.toLocaleString()}</TableCell>
                         <TableCell dir="ltr">{currencySymbol}{holding.average_cost.toLocaleString()}</TableCell>
                         <TableCell dir="ltr">
