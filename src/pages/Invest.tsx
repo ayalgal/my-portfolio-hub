@@ -477,8 +477,68 @@ export default function Invest() {
                   })}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            ) : (
+              /* Category grouped view */
+              <div className="space-y-4">
+                {categoryGroups.map(group => (
+                  <div key={group.id}>
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color || "#6b7280" }} />
+                      <span className="font-semibold text-sm cursor-pointer hover:underline" onClick={() => navigate(`/category/${group.id}`)}>{group.name}</span>
+                      <span className="text-xs text-muted-foreground">({group.catHoldings.length})</span>
+                    </div>
+                    <Table>
+                      <TableBody>
+                        {group.catHoldings.map(h => {
+                          const cp = h.current_price ?? h.average_cost;
+                          const vILS = getValueILS(h);
+                          const plILS = getPnlILS(h);
+                          return (
+                            <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
+                              <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
+                              <TableCell>{h.name}</TableCell>
+                              <TableCell dir="ltr">{h.quantity.toLocaleString()}</TableCell>
+                              <TableCell dir="ltr">₪{vILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                              <TableCell dir="ltr" className={plILS >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                {h.current_price ? `${plILS >= 0 ? '+' : ''}₪${plILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ))}
+                {uncategorizedHoldings.length > 0 && (
+                  <div>
+                    <div className="flex items-center gap-2 mb-2 px-1">
+                      <div className="w-3 h-3 rounded-full bg-muted-foreground/30" />
+                      <span className="font-semibold text-sm text-muted-foreground">ללא קטגוריה</span>
+                      <span className="text-xs text-muted-foreground">({uncategorizedHoldings.length})</span>
+                    </div>
+                    <Table>
+                      <TableBody>
+                        {uncategorizedHoldings.map(h => {
+                          const vILS = getValueILS(h);
+                          const plILS = getPnlILS(h);
+                          return (
+                            <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
+                              <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
+                              <TableCell>{h.name}</TableCell>
+                              <TableCell dir="ltr">{h.quantity.toLocaleString()}</TableCell>
+                              <TableCell dir="ltr">₪{vILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                              <TableCell dir="ltr" className={plILS >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                {h.current_price ? `${plILS >= 0 ? '+' : ''}₪${plILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            )}
 
           {archivedHoldings.length > 0 && (
             <Card className="opacity-60">
