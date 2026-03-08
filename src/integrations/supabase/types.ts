@@ -312,6 +312,56 @@ export type Database = {
         }
         Relationships: []
       }
+      stock_splits: {
+        Row: {
+          applied_at: string | null
+          created_at: string | null
+          detected_at: string | null
+          holding_id: string
+          id: string
+          ratio_from: number
+          ratio_to: number
+          split_date: string
+          status: string
+          symbol: string
+          user_id: string
+        }
+        Insert: {
+          applied_at?: string | null
+          created_at?: string | null
+          detected_at?: string | null
+          holding_id: string
+          id?: string
+          ratio_from: number
+          ratio_to: number
+          split_date: string
+          status?: string
+          symbol: string
+          user_id: string
+        }
+        Update: {
+          applied_at?: string | null
+          created_at?: string | null
+          detected_at?: string | null
+          holding_id?: string
+          id?: string
+          ratio_from?: number
+          ratio_to?: number
+          split_date?: string
+          status?: string
+          symbol?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_splits_holding_id_fkey"
+            columns: ["holding_id"]
+            isOneToOne: false
+            referencedRelation: "holdings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           created_at: string | null
