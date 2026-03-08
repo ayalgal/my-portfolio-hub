@@ -216,9 +216,10 @@ export default function Invest() {
             </CardContent>
           </Card>
         ) : (
+          <>
           <Card>
             <CardHeader>
-              <CardTitle>ניירות ערך ({holdings.length})</CardTitle>
+              <CardTitle>ניירות ערך ({activeHoldings.length})</CardTitle>
               <CardDescription>רשימת כל ניירות הערך בפורטפוליו</CardDescription>
             </CardHeader>
             <CardContent>
@@ -238,7 +239,7 @@ export default function Invest() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {holdings.map((holding) => {
+                  {activeHoldings.map((holding) => {
                     const currentPrice = holding.current_price ?? holding.average_cost;
                     const totalValue = holding.quantity * currentPrice;
                     const totalCost = holding.quantity * holding.average_cost;
@@ -262,7 +263,7 @@ export default function Invest() {
                                 variant="outline"
                                 className="text-xs cursor-pointer group"
                                 style={{ borderColor: (hc as any).allocation_categories?.color || undefined, color: (hc as any).allocation_categories?.color || undefined }}
-                                onClick={() => removeCategory.mutate(hc.id)}
+                                onClick={(e) => { e.stopPropagation(); removeCategory.mutate(hc.id); }}
                               >
                                 {(hc as any).allocation_categories?.name}
                                 <X className="h-3 w-3 mr-1 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -270,7 +271,7 @@ export default function Invest() {
                             ))}
                             <Popover>
                               <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-5 w-5">
+                                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={(e) => e.stopPropagation()}>
                                   <Tag className="h-3 w-3" />
                                 </Button>
                               </PopoverTrigger>
@@ -346,7 +347,7 @@ export default function Invest() {
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}><MoreHorizontal className="h-4 w-4" /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem className="text-destructive" onClick={() => deleteHolding.mutate(holding.id)}>
@@ -362,7 +363,38 @@ export default function Invest() {
               </Table>
             </CardContent>
           </Card>
-        )}
+
+          {archivedHoldings.length > 0 && (
+            <Card className="opacity-60">
+              <CardHeader>
+                <CardTitle className="text-base">ארכיון — נמכרו ({archivedHoldings.length})</CardTitle>
+                <CardDescription>ניירות ערך שנמכרו במלואם</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-right">סימול</TableHead>
+                      <TableHead className="text-right">שם</TableHead>
+                      <TableHead className="text-right">סוג</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {archivedHoldings.map((h) => (
+                      <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
+                        <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
+                        <TableCell>{h.name}</TableCell>
+                        <TableCell>{getAssetTypeLabel(h.asset_type)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
+          </>
+        );
+        })()}
       </div>
     </AppLayout>
   );
