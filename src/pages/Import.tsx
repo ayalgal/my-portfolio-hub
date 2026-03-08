@@ -262,8 +262,18 @@ export default function Import() {
   };
 
   const handleImport = async () => {
-    const portfolioId = portfolios?.[0]?.id;
-    if (!portfolioId) return;
+    let portfolioId = portfolios?.[0]?.id;
+    
+    // Auto-create a default portfolio if none exists
+    if (!portfolioId) {
+      try {
+        const result = await createPortfolio.mutateAsync({ name: "הפורטפוליו שלי", currency: "ILS" });
+        portfolioId = result.id;
+      } catch {
+        toast({ variant: "destructive", title: "שגיאה", description: "לא ניתן ליצור פורטפוליו" });
+        return;
+      }
+    }
 
     const selected = aggregated.filter(h => h.selected && h.totalQuantity > 0);
     if (selected.length === 0) return;
