@@ -9,10 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Plus, DollarSign, TrendingUp, Flag } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDividends } from "@/hooks/useDividends";
 import { useHoldings } from "@/hooks/useHoldings";
+import { useHoldingCategories } from "@/hooks/useHoldingCategories";
 import { DividendFilters, type GroupBy } from "@/components/dividends/DividendFilters";
 import { DividendTable } from "@/components/dividends/DividendTable";
+import { DividendSummary } from "@/components/dividends/DividendSummary";
 
 export default function Dividends() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -22,6 +25,7 @@ export default function Dividends() {
   const [taxRate, setTaxRate] = useState(25);
   const { dividends, isLoading, createDividend } = useDividends();
   const { holdings } = useHoldings();
+  const { holdingCategories } = useHoldingCategories();
 
   const handleAddDividend = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -159,17 +163,33 @@ export default function Dividends() {
           </Card>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>היסטוריית דיבידנדים</CardTitle>
-            <CardDescription>כל הדיבידנדים שהתקבלו</CardDescription>
-          </CardHeader>
-          <CardContent>
+        {/* Main content tabs: History vs Summary vs Forecast */}
+        <Tabs defaultValue="history" dir="rtl">
+          <TabsList>
+            <TabsTrigger value="history">היסטוריה</TabsTrigger>
+            <TabsTrigger value="summary">סיכום וצפי</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="history">
+            <Card>
+              <CardHeader>
+                <CardTitle>היסטוריית דיבידנדים</CardTitle>
+                <CardDescription>כל הדיבידנדים שהתקבלו</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? <Skeleton className="h-40 w-full" /> : (
+                  <DividendTable dividends={dividends as any} groupBy={groupBy} />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="summary">
             {isLoading ? <Skeleton className="h-40 w-full" /> : (
-              <DividendTable dividends={dividends as any} groupBy={groupBy} />
+              <DividendSummary dividends={dividends as any} holdingCategories={holdingCategories as any} />
             )}
-          </CardContent>
-        </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </AppLayout>
   );
