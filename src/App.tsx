@@ -10,6 +10,7 @@ import HoldingDetail from "./pages/HoldingDetail";
 import Invest from "./pages/Invest";
 import Visualize from "./pages/Visualize";
 import Allocations from "./pages/Allocations";
+import CategoryDetail from "./pages/CategoryDetail";
 import Dividends from "./pages/Dividends";
 import Goals from "./pages/Goals";
 import Activity from "./pages/Activity";
