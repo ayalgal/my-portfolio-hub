@@ -358,6 +358,8 @@ export default function Invest() {
                     const pnlPercent = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
                     const currencySymbol = getCurrencySymbol(holding.currency || "ILS");
                     const holdingCats = getCategoriesForHolding(holding.id);
+                    const valueILS = getValueILS(holding);
+                    const pnlILS = getPnlILS(holding);
                     
                     return (
                       <TableRow key={holding.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${holding.id}`)}>
