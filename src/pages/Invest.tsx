@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, TrendingUp, MoreHorizontal, Trash2, Tag, X } from "lucide-react";
+import { Plus, TrendingUp, MoreHorizontal, Trash2, Tag, X, ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react";
 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
@@ -40,12 +40,25 @@ export default function Invest() {
   const [selectedAssetType, setSelectedAssetType] = useState("stock");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [sortField, setSortField] = useState<string>("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filterText, setFilterText] = useState("");
   const { portfolios } = usePortfolio();
   const defaultPortfolioId = portfolios?.[0]?.id;
   const { holdings, isLoading, createHolding, deleteHolding } = useHoldings(defaultPortfolioId);
   const { categories, createCategory } = useAllocations();
   const { holdingCategories, assignCategory, removeCategory, getCategoriesForHolding } = useHoldingCategories();
   const { toast } = useToast();
+
+  const toggleSort = (field: string) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
+
+  const SortIcon = ({ field }: { field: string }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
 
   const handleAddHolding = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -199,12 +212,37 @@ export default function Invest() {
 
         
         {(() => {
-          const activeHoldings = holdings.filter(h => h.quantity > 0);
-          const archivedHoldings = holdings.filter(h => h.quantity <= 0);
+          const filtered = holdings.filter(h => {
+            if (!filterText) return true;
+            const q = filterText.toLowerCase();
+            return h.name.toLowerCase().includes(q) || h.symbol.toLowerCase().includes(q);
+          });
+          const activeHoldings = filtered.filter(h => h.quantity > 0);
+          const archivedHoldings = filtered.filter(h => h.quantity <= 0);
+
+          const sortedActive = [...activeHoldings].sort((a, b) => {
+            const getVal = (h: typeof a) => {
+              const cp = h.current_price ?? h.average_cost;
+              switch (sortField) {
+                case "symbol": return h.symbol;
+                case "name": return h.name;
+                case "type": return h.asset_type;
+                case "quantity": return h.quantity;
+                case "avgCost": return h.average_cost;
+                case "price": return cp;
+                case "value": return h.quantity * cp;
+                case "pnl": return h.current_price ? (h.quantity * cp) - (h.quantity * h.average_cost) : 0;
+                default: return h.name;
+              }
+            };
+            const va = getVal(a), vb = getVal(b);
+            const cmp = typeof va === "string" ? va.localeCompare(vb as string) : (va as number) - (vb as number);
+            return sortDir === "asc" ? cmp : -cmp;
+          });
           
           return isLoading ? (
           <Card><CardContent className="py-8"><Skeleton className="h-40 w-full" /></CardContent></Card>
-        ) : activeHoldings.length === 0 && archivedHoldings.length === 0 ? (
+        ) : activeHoldings.length === 0 && archivedHoldings.length === 0 && !filterText ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
               <TrendingUp className="h-12 w-12 text-muted-foreground mb-4" />
@@ -219,27 +257,56 @@ export default function Invest() {
           <>
           <Card>
             <CardHeader>
-              <CardTitle>ניירות ערך ({activeHoldings.length})</CardTitle>
-              <CardDescription>רשימת כל ניירות הערך בפורטפוליו</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>ניירות ערך ({activeHoldings.length})</CardTitle>
+                  <CardDescription>רשימת כל ניירות הערך בפורטפוליו</CardDescription>
+                </div>
+                <div className="relative w-48">
+                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="חיפוש..."
+                    value={filterText}
+                    onChange={e => setFilterText(e.target.value)}
+                    className="pr-9 h-8 text-sm"
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-right">סימול</TableHead>
-                    <TableHead className="text-right">שם</TableHead>
-                    <TableHead className="text-right">סוג</TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("symbol")}>
+                      <span className="flex items-center gap-1">סימול <SortIcon field="symbol" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("name")}>
+                      <span className="flex items-center gap-1">שם <SortIcon field="name" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("type")}>
+                      <span className="flex items-center gap-1">סוג <SortIcon field="type" /></span>
+                    </TableHead>
                     <TableHead className="text-right">קטגוריות</TableHead>
-                    <TableHead className="text-right">כמות</TableHead>
-                    <TableHead className="text-right">עלות ממוצעת</TableHead>
-                    <TableHead className="text-right">מחיר נוכחי</TableHead>
-                    <TableHead className="text-right">שווי כולל</TableHead>
-                    <TableHead className="text-right">רווח/הפסד</TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("quantity")}>
+                      <span className="flex items-center gap-1">כמות <SortIcon field="quantity" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("avgCost")}>
+                      <span className="flex items-center gap-1">עלות ממוצעת <SortIcon field="avgCost" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("price")}>
+                      <span className="flex items-center gap-1">מחיר נוכחי <SortIcon field="price" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("value")}>
+                      <span className="flex items-center gap-1">שווי כולל <SortIcon field="value" /></span>
+                    </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("pnl")}>
+                      <span className="flex items-center gap-1">רווח/הפסד <SortIcon field="pnl" /></span>
+                    </TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activeHoldings.map((holding) => {
+                  {sortedActive.map((holding) => {
                     const currentPrice = holding.current_price ?? holding.average_cost;
                     const totalValue = holding.quantity * currentPrice;
                     const totalCost = holding.quantity * holding.average_cost;

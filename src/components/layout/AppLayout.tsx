@@ -3,6 +3,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "./AppSidebar";
 import { Menu } from "lucide-react";
 import { EventNotifications } from "@/components/EventNotifications";
+import { AIChatWidget } from "@/components/AIChatWidget";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -27,6 +28,7 @@ export function AppLayout({ children }: AppLayoutProps) {
             {children}
           </div>
         </main>
+        <AIChatWidget />
       </div>
     </SidebarProvider>
   );
