@@ -506,6 +506,7 @@ export default function Invest() {
         );
         })()}
       </div>
+      <UpdateSavingsDialog open={!!savingsToUpdate} onOpenChange={(o) => !o && setSavingsToUpdate(null)} holding={savingsToUpdate} />
     </AppLayout>
   );
 }
