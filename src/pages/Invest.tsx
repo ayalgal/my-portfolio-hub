@@ -39,7 +39,6 @@ const PRESET_CATEGORIES = [
 
 export default function Invest() {
   const navigate = useNavigate();
-  const [selectedAssetType, setSelectedAssetType] = useState("stock");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [savingsToUpdate, setSavingsToUpdate] = useState<any>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
