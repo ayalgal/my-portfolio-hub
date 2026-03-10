@@ -250,8 +250,8 @@ export default function Dashboard() {
             <Button variant="outline" size="icon" onClick={handleRefreshPrices} disabled={isRefreshing} title="עדכן מחירים">
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
-            <Button asChild>
-              <Link to="/invest"><Plus className="ml-2 h-4 w-4" />הוסף נייר ערך</Link>
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              <Plus className="ml-2 h-4 w-4" />הוסף נייר ערך
             </Button>
           </div>
         </div>
