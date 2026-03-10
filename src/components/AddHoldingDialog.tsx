@@ -105,6 +105,7 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
                   <SelectItem value="mutual_fund">קרן נאמנות</SelectItem>
                   <SelectItem value="israeli_fund">קרן כספית ישראלית</SelectItem>
                   <SelectItem value="bank_savings">חיסכון בנקאי</SelectItem>
+                  <SelectItem value="cash">מזומן</SelectItem>
                 </SelectContent>
               </Select>
             </div>
