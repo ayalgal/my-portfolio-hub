@@ -135,7 +135,7 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
           </div>
           <div className="space-y-2">
             <Label htmlFor="name">שם</Label>
-            <Input id="name" name="name" placeholder={isBankSavings ? "חיסכון לאומי 12 חודשים" : "Apple Inc."} required />
+            <Input id="name" name="name" placeholder={isBankSavings ? "חיסכון לאומי 12 חודשים" : isCash ? "מזומן דולרי" : "Apple Inc."} required />
           </div>
 
           {isBankSavings ? (
