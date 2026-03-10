@@ -85,6 +85,7 @@ export default function Invest() {
       mutual_fund: "קרן נאמנות",
       israeli_fund: "קרן כספית",
       bank_savings: "חיסכון בנקאי",
+      cash: "מזומן",
     };
     return labels[type] || type;
   };
