@@ -85,6 +85,7 @@ export default function Invest() {
       mutual_fund: "קרן נאמנות",
       israeli_fund: "קרן כספית",
       bank_savings: "חיסכון בנקאי",
+      cash: "מזומן",
     };
     return labels[type] || type;
   };
@@ -358,9 +359,9 @@ export default function Invest() {
                               <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}><MoreHorizontal className="h-4 w-4" /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              {holding.asset_type === 'bank_savings' && (
+                              {(holding.asset_type === 'bank_savings' || holding.asset_type === 'cash') && (
                                 <DropdownMenuItem onClick={() => setSavingsToUpdate(holding)}>
-                                  <Pencil className="ml-2 h-4 w-4" />עדכן חיסכון
+                                  <Pencil className="ml-2 h-4 w-4" />{holding.asset_type === 'cash' ? 'עדכן מזומן' : 'עדכן חיסכון'}
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuItem className="text-destructive" onClick={() => deleteHolding.mutate(holding.id)}>

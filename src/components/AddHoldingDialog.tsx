@@ -39,9 +39,9 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
     let averageCost: number;
     let currentPrice: number | undefined;
 
-    if (isBankSavings) {
+    if (isBankSavings || isCash) {
       const originalAmount = parseFloat(formData.get("originalAmount") as string) || 0;
-      const interestAmount = parseFloat(formData.get("interestAmount") as string) || 0;
+      const interestAmount = isCash ? 0 : (parseFloat(formData.get("interestAmount") as string) || 0);
       quantity = 1;
       averageCost = originalAmount;
       currentPrice = originalAmount + interestAmount;
@@ -63,10 +63,12 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
     }, {
       onSuccess: () => {
         onOpenChange(false);
-        if (isBankSavings) {
+        if (isBankSavings || isCash) {
           toast({
             title: `${name} נוסף בהצלחה`,
-            description: `סכום מקורי: ${currSym}${averageCost.toLocaleString()} · ריבית: ${currSym}${((currentPrice || 0) - averageCost).toLocaleString()}`,
+            description: isCash 
+              ? `סכום: ${currSym}${averageCost.toLocaleString()}`
+              : `סכום מקורי: ${currSym}${averageCost.toLocaleString()} · ריבית: ${currSym}${((currentPrice || 0) - averageCost).toLocaleString()}`,
             duration: 8000,
           });
         } else {
@@ -82,6 +84,7 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
   };
 
   const isBankSavings = selectedAssetType === "bank_savings";
+  const isCash = selectedAssetType === "cash";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -102,6 +105,7 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
                   <SelectItem value="mutual_fund">קרן נאמנות</SelectItem>
                   <SelectItem value="israeli_fund">קרן כספית ישראלית</SelectItem>
                   <SelectItem value="bank_savings">חיסכון בנקאי</SelectItem>
+                  <SelectItem value="cash">מזומן</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -116,6 +120,11 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
                   <Label htmlFor="symbol">מזהה (שם הבנק)</Label>
                   <Input id="symbol" name="symbol" placeholder="לאומי" required />
                 </>
+              ) : isCash ? (
+                <>
+                  <Label htmlFor="symbol">מזהה</Label>
+                  <Input id="symbol" name="symbol" placeholder="CASH-USD" required dir="ltr" />
+                </>
               ) : (
                 <>
                   <Label htmlFor="symbol">סימול</Label>
@@ -126,13 +135,18 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
           </div>
           <div className="space-y-2">
             <Label htmlFor="name">שם</Label>
-            <Input id="name" name="name" placeholder={isBankSavings ? "חיסכון לאומי 12 חודשים" : "Apple Inc."} required />
+            <Input id="name" name="name" placeholder={isBankSavings ? "חיסכון לאומי 12 חודשים" : isCash ? "מזומן דולרי" : "Apple Inc."} required />
           </div>
 
-          {isBankSavings ? (
+          {isCash ? (
+            <div className="space-y-2">
+              <Label htmlFor="originalAmount">סכום</Label>
+              <Input id="originalAmount" name="originalAmount" type="number" step="0.01" placeholder="10000" required dir="ltr" />
+            </div>
+          ) : isBankSavings ? (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="originalAmount">סכום מקורי</Label>
+                <Label htmlFor="originalAmount">סכום מושקע</Label>
                 <Input id="originalAmount" name="originalAmount" type="number" step="0.01" placeholder="50000" required dir="ltr" />
               </div>
               <div className="space-y-2">
