@@ -494,6 +494,8 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+      <AddHoldingDialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen} />
+      <UpdateSavingsDialog open={!!savingsToUpdate} onOpenChange={(o) => !o && setSavingsToUpdate(null)} holding={savingsToUpdate} />
     </AppLayout>
   );
 }
