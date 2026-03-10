@@ -84,6 +84,7 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
   };
 
   const isBankSavings = selectedAssetType === "bank_savings";
+  const isCash = selectedAssetType === "cash";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
