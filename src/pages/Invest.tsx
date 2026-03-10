@@ -138,84 +138,11 @@ export default function Invest() {
             <p className="text-muted-foreground">ניהול ניירות הערך בפורטפוליו שלך</p>
           </div>
           
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="ml-2 h-4 w-4" />הוסף נייר ערך</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md" dir="rtl">
-              <DialogHeader>
-                <DialogTitle>הוסף נייר ערך חדש</DialogTitle>
-                <DialogDescription>הזן את פרטי נייר הערך להוספה לפורטפוליו</DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleAddHolding} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="assetType">סוג נכס</Label>
-                    <Select name="assetType" defaultValue="stock" onValueChange={setSelectedAssetType}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="stock">מניה</SelectItem>
-                        <SelectItem value="etf">ETF</SelectItem>
-                        <SelectItem value="mutual_fund">קרן נאמנות</SelectItem>
-                        <SelectItem value="israeli_fund">קרן כספית ישראלית</SelectItem>
-                        <SelectItem value="bank_savings">חיסכון בנקאי</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                   {selectedAssetType === 'israeli_fund' ? (
-                      <>
-                        <Label htmlFor="fundNumber">מספר קרן (7 ספרות)</Label>
-                        <Input id="fundNumber" name="fundNumber" placeholder="5131377" required dir="ltr" maxLength={7} />
-                      </>
-                    ) : selectedAssetType === 'bank_savings' ? (
-                      <>
-                        <Label htmlFor="symbol">מזהה (שם הבנק)</Label>
-                        <Input id="symbol" name="symbol" placeholder="לאומי" required />
-                      </>
-                    ) : (
-                      <>
-                        <Label htmlFor="symbol">סימול</Label>
-                        <Input id="symbol" name="symbol" placeholder="AAPL" required dir="ltr" />
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="name">שם</Label>
-                  <Input id="name" name="name" placeholder="Apple Inc." required />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity">כמות</Label>
-                    <Input id="quantity" name="quantity" type="number" step="0.0001" placeholder="10" required dir="ltr" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="averageCost">עלות ממוצעת</Label>
-                    <Input id="averageCost" name="averageCost" type="number" step="0.01" placeholder="150.00" required dir="ltr" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currency">מטבע</Label>
-                  <Select name="currency" defaultValue="ILS">
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ILS">₪ שקל</SelectItem>
-                      <SelectItem value="USD">$ דולר</SelectItem>
-                      <SelectItem value="CAD">C$ דולר קנדי</SelectItem>
-                      <SelectItem value="EUR">€ אירו</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button type="submit" className="w-full" disabled={createHolding.isPending}>
-                  {createHolding.isPending ? "מוסיף..." : "הוסף"}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setIsDialogOpen(true)}><Plus className="ml-2 h-4 w-4" />הוסף נייר ערך</Button>
+          <AddHoldingDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
         </div>
 
-        
+
         {(() => {
           const filtered = holdings.filter(h => {
             if (!filterText) return true;
