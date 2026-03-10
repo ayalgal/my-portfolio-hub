@@ -20,7 +20,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
+import { AddHoldingDialog } from "@/components/AddHoldingDialog";
+import { UpdateSavingsDialog } from "@/components/UpdateSavingsDialog";
 type AssetType = 'stock' | 'etf' | 'mutual_fund' | 'israeli_fund' | 'bank_savings';
 
 const PRESET_CATEGORIES = [
