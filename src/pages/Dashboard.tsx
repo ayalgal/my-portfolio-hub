@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, TrendingDown, Wallet, PieChart as PieChartIcon, Plus, ArrowUpLeft, ArrowDownRight, RefreshCw, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
@@ -20,6 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, BarChart, Bar } from "recharts";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { AddHoldingDialog } from "@/components/AddHoldingDialog";
+import { UpdateSavingsDialog } from "@/components/UpdateSavingsDialog";
 
 type DisplayCurrency = 'ILS' | 'USD' | 'CAD';
 
@@ -43,8 +45,29 @@ export default function Dashboard() {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [showSP500, setShowSP500] = useState(true);
   const [selectedDivYear, setSelectedDivYear] = useState<number>(new Date().getFullYear());
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [savingsToUpdate, setSavingsToUpdate] = useState<typeof holdings[0] | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Monthly reminder for bank savings updates
+  useEffect(() => {
+    if (holdings.length === 0) return;
+    const bankSavings = holdings.filter(h => h.asset_type === 'bank_savings' && h.quantity > 0);
+    const stale = bankSavings.filter(h => {
+      const updated = h.updated_at || h.created_at;
+      if (!updated) return true;
+      const daysSinceUpdate = (Date.now() - new Date(updated).getTime()) / (1000 * 60 * 60 * 24);
+      return daysSinceUpdate >= 30;
+    });
+    if (stale.length > 0) {
+      toast({
+        title: "תזכורת: עדכן חסכונות בנקאיים",
+        description: `${stale.map(s => s.name).join(", ")} לא עודכנו מעל חודש`,
+        duration: 10000,
+      });
+    }
+  }, [holdings]);
 
   const isLoading = holdingsLoading || dividendsLoading || ratesLoading;
 
@@ -227,8 +250,8 @@ export default function Dashboard() {
             <Button variant="outline" size="icon" onClick={handleRefreshPrices} disabled={isRefreshing} title="עדכן מחירים">
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
             </Button>
-            <Button asChild>
-              <Link to="/invest"><Plus className="ml-2 h-4 w-4" />הוסף נייר ערך</Link>
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              <Plus className="ml-2 h-4 w-4" />הוסף נייר ערך
             </Button>
           </div>
         </div>
@@ -471,6 +494,8 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+      <AddHoldingDialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen} />
+      <UpdateSavingsDialog open={!!savingsToUpdate} onOpenChange={(o) => !o && setSavingsToUpdate(null)} holding={savingsToUpdate} />
     </AppLayout>
   );
 }

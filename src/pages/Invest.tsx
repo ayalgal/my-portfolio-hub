@@ -4,13 +4,10 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, TrendingUp, MoreHorizontal, Trash2, Tag, X, ArrowUpDown, ArrowUp, ArrowDown, Search, LayoutGrid, List } from "lucide-react";
+import { Plus, TrendingUp, MoreHorizontal, Trash2, Tag, X, ArrowUpDown, ArrowUp, ArrowDown, Search, LayoutGrid, List, Pencil } from "lucide-react";
 
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 import { useHoldings } from "@/hooks/useHoldings";
 import { usePortfolio } from "@/hooks/usePortfolio";
@@ -21,8 +18,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AddHoldingDialog } from "@/components/AddHoldingDialog";
+import { UpdateSavingsDialog } from "@/components/UpdateSavingsDialog";
 
-type AssetType = 'stock' | 'etf' | 'mutual_fund' | 'israeli_fund' | 'bank_savings';
 
 const PRESET_CATEGORIES = [
   { name: "דיבידנד קלאסי", color: "#22c55e" },
@@ -39,8 +37,8 @@ const PRESET_CATEGORIES = [
 
 export default function Invest() {
   const navigate = useNavigate();
-  const [selectedAssetType, setSelectedAssetType] = useState("stock");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [savingsToUpdate, setSavingsToUpdate] = useState<any>(null);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [sortField, setSortField] = useState<string>("name");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -48,7 +46,7 @@ export default function Invest() {
   const [viewMode, setViewMode] = useState<"list" | "category">("list");
   const { portfolios } = usePortfolio();
   const defaultPortfolioId = portfolios?.[0]?.id;
-  const { holdings, isLoading, createHolding, deleteHolding } = useHoldings(defaultPortfolioId);
+  const { holdings, isLoading, deleteHolding } = useHoldings(defaultPortfolioId);
   const { categories, createCategory } = useAllocations();
   const { holdingCategories, assignCategory, removeCategory, getCategoriesForHolding } = useHoldingCategories();
   const { convertToILS } = useExchangeRates();
@@ -64,38 +62,6 @@ export default function Invest() {
     return sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
   };
 
-  const handleAddHolding = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!defaultPortfolioId) return;
-    const formData = new FormData(e.currentTarget);
-    const fundNumber = formData.get("fundNumber") as string;
-    const name = formData.get("name") as string;
-    const quantity = parseFloat(formData.get("quantity") as string) || 0;
-    const averageCost = parseFloat(formData.get("averageCost") as string) || 0;
-    const currency = formData.get("currency") as string || "ILS";
-    const currSym = getCurrencySymbol(currency);
-    const totalValue = quantity * averageCost;
-
-    createHolding.mutate({
-      symbol: fundNumber || (formData.get("symbol") as string),
-      name,
-      asset_type: selectedAssetType || "stock",
-      quantity,
-      average_cost: averageCost,
-      currency,
-      portfolio_id: defaultPortfolioId,
-      fund_number: fundNumber || null,
-    }, {
-      onSuccess: () => {
-        setIsDialogOpen(false);
-        toast({
-          title: `${name} נוסף בהצלחה`,
-          description: `כמות: ${quantity.toLocaleString()} · עלות ממוצעת: ${currSym}${averageCost.toLocaleString()} · שווי: ${currSym}${totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-          duration: 8000,
-        });
-      },
-    });
-  };
 
   const handleAssignCategory = async (holdingId: string, categoryId: string) => {
     const existing = getCategoriesForHolding(holdingId);
@@ -137,84 +103,11 @@ export default function Invest() {
             <p className="text-muted-foreground">ניהול ניירות הערך בפורטפוליו שלך</p>
           </div>
           
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="ml-2 h-4 w-4" />הוסף נייר ערך</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md" dir="rtl">
-              <DialogHeader>
-                <DialogTitle>הוסף נייר ערך חדש</DialogTitle>
-                <DialogDescription>הזן את פרטי נייר הערך להוספה לפורטפוליו</DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleAddHolding} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="assetType">סוג נכס</Label>
-                    <Select name="assetType" defaultValue="stock" onValueChange={setSelectedAssetType}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="stock">מניה</SelectItem>
-                        <SelectItem value="etf">ETF</SelectItem>
-                        <SelectItem value="mutual_fund">קרן נאמנות</SelectItem>
-                        <SelectItem value="israeli_fund">קרן כספית ישראלית</SelectItem>
-                        <SelectItem value="bank_savings">חיסכון בנקאי</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                   {selectedAssetType === 'israeli_fund' ? (
-                      <>
-                        <Label htmlFor="fundNumber">מספר קרן (7 ספרות)</Label>
-                        <Input id="fundNumber" name="fundNumber" placeholder="5131377" required dir="ltr" maxLength={7} />
-                      </>
-                    ) : selectedAssetType === 'bank_savings' ? (
-                      <>
-                        <Label htmlFor="symbol">מזהה (שם הבנק)</Label>
-                        <Input id="symbol" name="symbol" placeholder="לאומי" required />
-                      </>
-                    ) : (
-                      <>
-                        <Label htmlFor="symbol">סימול</Label>
-                        <Input id="symbol" name="symbol" placeholder="AAPL" required dir="ltr" />
-                      </>
-                    )}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="name">שם</Label>
-                  <Input id="name" name="name" placeholder="Apple Inc." required />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="quantity">כמות</Label>
-                    <Input id="quantity" name="quantity" type="number" step="0.0001" placeholder="10" required dir="ltr" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="averageCost">עלות ממוצעת</Label>
-                    <Input id="averageCost" name="averageCost" type="number" step="0.01" placeholder="150.00" required dir="ltr" />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="currency">מטבע</Label>
-                  <Select name="currency" defaultValue="ILS">
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ILS">₪ שקל</SelectItem>
-                      <SelectItem value="USD">$ דולר</SelectItem>
-                      <SelectItem value="CAD">C$ דולר קנדי</SelectItem>
-                      <SelectItem value="EUR">€ אירו</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button type="submit" className="w-full" disabled={createHolding.isPending}>
-                  {createHolding.isPending ? "מוסיף..." : "הוסף"}
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={() => setIsDialogOpen(true)}><Plus className="ml-2 h-4 w-4" />הוסף נייר ערך</Button>
+          <AddHoldingDialog open={isDialogOpen} onOpenChange={setIsDialogOpen} />
         </div>
 
-        
+
         {(() => {
           const filtered = holdings.filter(h => {
             if (!filterText) return true;
@@ -465,6 +358,11 @@ export default function Invest() {
                               <Button variant="ghost" size="icon" onClick={(e) => e.stopPropagation()}><MoreHorizontal className="h-4 w-4" /></Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
+                              {holding.asset_type === 'bank_savings' && (
+                                <DropdownMenuItem onClick={() => setSavingsToUpdate(holding)}>
+                                  <Pencil className="ml-2 h-4 w-4" />עדכן חיסכון
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem className="text-destructive" onClick={() => deleteHolding.mutate(holding.id)}>
                                 <Trash2 className="ml-2 h-4 w-4" />מחק
                               </DropdownMenuItem>
@@ -573,6 +471,7 @@ export default function Invest() {
         );
         })()}
       </div>
+      <UpdateSavingsDialog open={!!savingsToUpdate} onOpenChange={(o) => !o && setSavingsToUpdate(null)} holding={savingsToUpdate} />
     </AppLayout>
   );
 }
