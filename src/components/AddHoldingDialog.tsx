@@ -39,9 +39,9 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
     let averageCost: number;
     let currentPrice: number | undefined;
 
-    if (isBankSavings) {
+    if (isBankSavings || isCash) {
       const originalAmount = parseFloat(formData.get("originalAmount") as string) || 0;
-      const interestAmount = parseFloat(formData.get("interestAmount") as string) || 0;
+      const interestAmount = isCash ? 0 : (parseFloat(formData.get("interestAmount") as string) || 0);
       quantity = 1;
       averageCost = originalAmount;
       currentPrice = originalAmount + interestAmount;
