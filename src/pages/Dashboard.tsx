@@ -45,8 +45,29 @@ export default function Dashboard() {
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [showSP500, setShowSP500] = useState(true);
   const [selectedDivYear, setSelectedDivYear] = useState<number>(new Date().getFullYear());
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [savingsToUpdate, setSavingsToUpdate] = useState<typeof holdings[0] | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+
+  // Monthly reminder for bank savings updates
+  useEffect(() => {
+    if (holdings.length === 0) return;
+    const bankSavings = holdings.filter(h => h.asset_type === 'bank_savings' && h.quantity > 0);
+    const stale = bankSavings.filter(h => {
+      const updated = h.updated_at || h.created_at;
+      if (!updated) return true;
+      const daysSinceUpdate = (Date.now() - new Date(updated).getTime()) / (1000 * 60 * 60 * 24);
+      return daysSinceUpdate >= 30;
+    });
+    if (stale.length > 0) {
+      toast({
+        title: "תזכורת: עדכן חסכונות בנקאיים",
+        description: `${stale.map(s => s.name).join(", ")} לא עודכנו מעל חודש`,
+        duration: 10000,
+      });
+    }
+  }, [holdings]);
 
   const isLoading = holdingsLoading || dividendsLoading || ratesLoading;
 
