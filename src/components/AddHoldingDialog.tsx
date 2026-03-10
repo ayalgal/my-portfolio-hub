@@ -120,6 +120,11 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
                   <Label htmlFor="symbol">מזהה (שם הבנק)</Label>
                   <Input id="symbol" name="symbol" placeholder="לאומי" required />
                 </>
+              ) : isCash ? (
+                <>
+                  <Label htmlFor="symbol">מזהה</Label>
+                  <Input id="symbol" name="symbol" placeholder="CASH-USD" required dir="ltr" />
+                </>
               ) : (
                 <>
                   <Label htmlFor="symbol">סימול</Label>
