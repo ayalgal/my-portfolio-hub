@@ -63,10 +63,12 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
     }, {
       onSuccess: () => {
         onOpenChange(false);
-        if (isBankSavings) {
+        if (isBankSavings || isCash) {
           toast({
             title: `${name} נוסף בהצלחה`,
-            description: `סכום מקורי: ${currSym}${averageCost.toLocaleString()} · ריבית: ${currSym}${((currentPrice || 0) - averageCost).toLocaleString()}`,
+            description: isCash 
+              ? `סכום: ${currSym}${averageCost.toLocaleString()}`
+              : `סכום מקורי: ${currSym}${averageCost.toLocaleString()} · ריבית: ${currSym}${((currentPrice || 0) - averageCost).toLocaleString()}`,
             duration: 8000,
           });
         } else {
