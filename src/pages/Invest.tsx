@@ -64,38 +64,6 @@ export default function Invest() {
     return sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
   };
 
-  const handleAddHolding = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!defaultPortfolioId) return;
-    const formData = new FormData(e.currentTarget);
-    const fundNumber = formData.get("fundNumber") as string;
-    const name = formData.get("name") as string;
-    const quantity = parseFloat(formData.get("quantity") as string) || 0;
-    const averageCost = parseFloat(formData.get("averageCost") as string) || 0;
-    const currency = formData.get("currency") as string || "ILS";
-    const currSym = getCurrencySymbol(currency);
-    const totalValue = quantity * averageCost;
-
-    createHolding.mutate({
-      symbol: fundNumber || (formData.get("symbol") as string),
-      name,
-      asset_type: selectedAssetType || "stock",
-      quantity,
-      average_cost: averageCost,
-      currency,
-      portfolio_id: defaultPortfolioId,
-      fund_number: fundNumber || null,
-    }, {
-      onSuccess: () => {
-        setIsDialogOpen(false);
-        toast({
-          title: `${name} נוסף בהצלחה`,
-          description: `כמות: ${quantity.toLocaleString()} · עלות ממוצעת: ${currSym}${averageCost.toLocaleString()} · שווי: ${currSym}${totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
-          duration: 8000,
-        });
-      },
-    });
-  };
 
   const handleAssignCategory = async (holdingId: string, categoryId: string) => {
     const existing = getCategoriesForHolding(holdingId);
