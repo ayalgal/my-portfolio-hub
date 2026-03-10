@@ -138,10 +138,15 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
             <Input id="name" name="name" placeholder={isBankSavings ? "חיסכון לאומי 12 חודשים" : isCash ? "מזומן דולרי" : "Apple Inc."} required />
           </div>
 
-          {isBankSavings ? (
+          {isCash ? (
+            <div className="space-y-2">
+              <Label htmlFor="originalAmount">סכום</Label>
+              <Input id="originalAmount" name="originalAmount" type="number" step="0.01" placeholder="10000" required dir="ltr" />
+            </div>
+          ) : isBankSavings ? (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="originalAmount">סכום מקורי</Label>
+                <Label htmlFor="originalAmount">סכום מושקע</Label>
                 <Input id="originalAmount" name="originalAmount" type="number" step="0.01" placeholder="50000" required dir="ltr" />
               </div>
               <div className="space-y-2">
