@@ -4,10 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, DollarSign, TrendingUp, Flag } from "lucide-react";
+import { Plus, DollarSign, TrendingUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useDividends } from "@/hooks/useDividends";
@@ -23,7 +22,6 @@ const currSymbols: Record<DisplayCurrency, string> = { ILS: "₪", USD: "$", CAD
 
 export default function Dividends() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isIsraeli, setIsIsraeli] = useState(false);
   const [selectedHoldingId, setSelectedHoldingId] = useState("");
   const [groupBy, setGroupBy] = useState<GroupBy>("all");
   const [taxRate, setTaxRate] = useState(25);
@@ -37,14 +35,16 @@ export default function Dividends() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const amount = parseFloat(formData.get("amount") as string) || 0;
+    const selectedHolding = holdings.find(h => h.id === selectedHoldingId);
+    const currency = selectedHolding?.currency || "USD";
 
     createDividend.mutate({
       holding_id: selectedHoldingId,
       amount,
-      currency: isIsraeli ? "ILS" : "USD",
+      currency,
       payment_date: formData.get("paymentDate") as string,
       shares_at_payment: parseFloat(formData.get("shares") as string) || 0,
-      is_israeli: isIsraeli,
+      is_israeli: currency === "ILS",
       tax_withheld: amount * (taxRate / 100),
     }, {
       onSuccess: () => setIsDialogOpen(false),
@@ -58,7 +58,6 @@ export default function Dividends() {
 
   const totalDividendsILS = dividends.reduce((sum, d) => sum + convertToILS(d.amount, d.currency || "ILS"), 0);
   const totalTaxILS = dividends.reduce((sum, d) => sum + convertToILS(d.tax_withheld || 0, d.currency || "ILS"), 0);
-  const israeliCount = dividends.filter(d => d.is_israeli).length;
 
   return (
     <AppLayout>
@@ -90,10 +89,6 @@ export default function Dividends() {
                   <DialogDescription>רשום דיבידנד שהתקבל</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleAddDividend} className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="israeli">דיבידנד ישראלי</Label>
-                    <Switch id="israeli" checked={isIsraeli} onCheckedChange={setIsIsraeli} />
-                  </div>
                   <div className="space-y-2">
                     <Label>נייר ערך</Label>
                     <Select value={selectedHoldingId} onValueChange={setSelectedHoldingId}>
@@ -107,7 +102,10 @@ export default function Dividends() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="amount">סכום ({isIsraeli ? "₪" : "$"})</Label>
+                      <Label htmlFor="amount">סכום ({(() => {
+                        const h = holdings.find(h => h.id === selectedHoldingId);
+                        return h ? ({ ILS: "₪", USD: "$", CAD: "C$", EUR: "€" }[h.currency || "USD"] || "$") : "$";
+                      })()})</Label>
                       <Input id="amount" name="amount" type="number" step="0.01" placeholder="100.00" required dir="ltr" />
                     </div>
                     <div className="space-y-2">
@@ -132,7 +130,7 @@ export default function Dividends() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">סה״כ דיבידנדים</CardTitle>
@@ -157,20 +155,6 @@ export default function Dividends() {
                 <>
                   <div className="text-2xl font-bold">{fmt(totalTaxILS)}</div>
                   <p className="text-xs text-muted-foreground">ניכוי במקור</p>
-                </>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">דיבידנדים ישראליים</CardTitle>
-              <Flag className="h-4 w-4 text-blue-500" />
-            </CardHeader>
-            <CardContent>
-              {isLoading ? <Skeleton className="h-8 w-24" /> : (
-                <>
-                  <div className="text-2xl font-bold text-blue-500">{israeliCount}</div>
-                  <p className="text-xs text-muted-foreground">מתוך {dividends.length} סה״כ</p>
                 </>
               )}
             </CardContent>

@@ -65,7 +65,8 @@ export default function CategoryDetail() {
 
   const totalCost = catHoldings.reduce((s, h) => s + convertToILS(h.quantity * h.average_cost, h.currency || "ILS"), 0);
   const pricePnl = totalValue - totalCost;
-  const totalPnl = pricePnl + totalDivNet; // Total return = price P&L + dividends net
+  const totalPnl = pricePnl + totalDivNet;
+  const totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
 
   // Default currency: USD for non-Israeli, ILS for Israeli
   const isIsraeliCategory = catHoldings.every(h => h.currency === "ILS" || h.asset_type === "israeli_fund");
@@ -175,7 +176,7 @@ export default function CategoryDetail() {
             <CardContent className="pt-4 pb-4">
               <p className="text-xs text-muted-foreground">רווח/הפסד כולל</p>
               <p className={`text-2xl font-bold ${totalPnl >= 0 ? 'text-green-500' : 'text-red-500'}`} dir="ltr">
-                {totalPnl >= 0 ? '+' : ''}{fmtD(totalPnl)}
+                {totalPnl >= 0 ? '+' : ''}{fmtD(totalPnl)} ({totalPnlPct >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%)
               </p>
               <p className="text-xs text-muted-foreground">מחיר: {fmtD(pricePnl)} | דיב: +{fmtD(totalDivNet)}</p>
             </CardContent>
@@ -253,9 +254,11 @@ export default function CategoryDetail() {
                         const val = h.quantity * price;
                         const cost = h.quantity * h.average_cost;
                         const hPricePnl = val - cost;
+                        const hPricePnlPct = cost > 0 ? (hPricePnl / cost) * 100 : 0;
                         const hDivNet = (holdingDivNet.get(h.id) || 0);
                         const hDivNetOrig = convertFromILS(hDivNet, h.currency || "ILS");
                         const hTotalPnl = hPricePnl + hDivNetOrig;
+                        const hTotalPnlPct = cost > 0 ? (hTotalPnl / cost) * 100 : 0;
                         return (
                           <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
                             <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
@@ -264,13 +267,13 @@ export default function CategoryDetail() {
                             <TableCell dir="ltr">{curr}{cost.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
                             <TableCell dir="ltr">{curr}{val.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
                             <TableCell dir="ltr" className={hPricePnl >= 0 ? 'text-green-500' : 'text-red-500'}>
-                              {h.current_price ? `${hPricePnl >= 0 ? '+' : ''}${curr}${hPricePnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                              {h.current_price ? `${hPricePnl >= 0 ? '+' : ''}${curr}${hPricePnl.toLocaleString(undefined, { maximumFractionDigits: 0 })} (${hPricePnlPct >= 0 ? '+' : ''}${hPricePnlPct.toFixed(1)}%)` : '—'}
                             </TableCell>
                             <TableCell dir="ltr" className="text-green-500">
                               {hDivNetOrig > 0 ? `+${curr}${hDivNetOrig.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
                             </TableCell>
                             <TableCell dir="ltr" className={hTotalPnl >= 0 ? 'text-green-500 font-semibold' : 'text-red-500 font-semibold'}>
-                              {h.current_price ? `${hTotalPnl >= 0 ? '+' : ''}${curr}${hTotalPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                              {h.current_price ? `${hTotalPnl >= 0 ? '+' : ''}${curr}${hTotalPnl.toLocaleString(undefined, { maximumFractionDigits: 0 })} (${hTotalPnlPct >= 0 ? '+' : ''}${hTotalPnlPct.toFixed(1)}%)` : '—'}
                             </TableCell>
                           </TableRow>
                         );
@@ -340,14 +343,16 @@ export default function CategoryDetail() {
               setEditOpen(false);
             }} className="space-y-4">
               <div className="space-y-2">
-                <Label>שם</Label>
-                <Input name="name" defaultValue={category.name} required />
+                <Label htmlFor="edit-name">שם</Label>
+                <Input id="edit-name" name="name" defaultValue={category.name} required />
               </div>
               <div className="space-y-2">
-                <Label>יעד הקצאה (%)</Label>
-                <Input name="target" type="number" min="0" max="100" defaultValue={category.target_percentage || 0} dir="ltr" />
+                <Label htmlFor="edit-target">יעד הקצאה (%)</Label>
+                <Input id="edit-target" name="target" type="number" min="0" max="100" defaultValue={category.target_percentage || 0} dir="ltr" />
               </div>
-              <Button type="submit" className="w-full">שמור</Button>
+              <Button type="submit" className="w-full" disabled={updateCategory.isPending}>
+                {updateCategory.isPending ? "שומר..." : "שמור"}
+              </Button>
             </form>
           </DialogContent>
         </Dialog>
