@@ -198,9 +198,9 @@ export function DividendSummary({ dividends, holdingCategories }: Props) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
           <div>
-            <CardTitle>היסטוריית דיבידנדים חודשית</CardTitle>
+            <CardTitle>צפי דיבידנד</CardTitle>
             <CardDescription>
-              נטו אחרי מס — רק דיבידנדים שהיית זכאי להם
+              נטו אחרי מס
               {prevYearTotal > 0 && (
                 <span className={`mr-2 font-semibold ${yoyChange >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                   ({yoyChange >= 0 ? '+' : ''}{yoyChange.toFixed(1)}% מול {selectedYear - 1})
