@@ -132,6 +132,11 @@ export default function Invest() {
             const cost = h.quantity * h.average_cost;
             return cost > 0 ? ((h.quantity * h.current_price - cost) / cost) * 100 : 0;
           };
+          // P&L in holding's own currency
+          const getPnlNative = (h: typeof holdings[0]) => {
+            if (!h.current_price) return 0;
+            return h.quantity * h.current_price - h.quantity * h.average_cost;
+          };
 
           const sortedActive = [...activeHoldings].sort((a, b) => {
             const getVal = (h: typeof a) => {
@@ -231,13 +236,10 @@ export default function Invest() {
                       <span className="flex items-center gap-1">מחיר נוכחי <SortIcon field="price" /></span>
                     </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("value")}>
-                      <span className="flex items-center gap-1">שווי (₪) <SortIcon field="value" /></span>
+                      <span className="flex items-center gap-1">שווי <SortIcon field="value" /></span>
                     </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("pnl")}>
-                      <span className="flex items-center gap-1">רווח/הפסד (₪) <SortIcon field="pnl" /></span>
-                    </TableHead>
-                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("pnlPct")}>
-                      <span className="flex items-center gap-1">% <SortIcon field="pnlPct" /></span>
+                      <span className="flex items-center gap-1">רווח/הפסד <SortIcon field="pnl" /></span>
                     </TableHead>
                     <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
@@ -251,8 +253,6 @@ export default function Invest() {
                     const pnlPercent = totalCost > 0 ? (pnl / totalCost) * 100 : 0;
                     const currencySymbol = getCurrencySymbol(holding.currency || "ILS");
                     const holdingCats = getCategoriesForHolding(holding.id);
-                    const valueILS = getValueILS(holding);
-                    const pnlILS = getPnlILS(holding);
                     
                     return (
                       <TableRow key={holding.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${holding.id}`)}>
@@ -344,14 +344,11 @@ export default function Invest() {
                             : <span className="text-muted-foreground">—</span>
                           }
                         </TableCell>
-                        <TableCell dir="ltr" className="font-semibold">₪{valueILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                        <TableCell dir="ltr" className={pnlILS >= 0 ? 'text-green-500' : 'text-red-500'}>
+                        <TableCell dir="ltr" className="font-semibold">{currencySymbol}{totalValue.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                        <TableCell dir="ltr" className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
                           {holding.current_price ? (
-                            <>{pnlILS >= 0 ? '+' : ''}₪{pnlILS.toLocaleString(undefined, {maximumFractionDigits: 0})}</>
+                            <>{pnl >= 0 ? '+' : ''}{currencySymbol}{pnl.toLocaleString(undefined, {maximumFractionDigits: 0})} ({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)</>
                           ) : '—'}
-                        </TableCell>
-                        <TableCell dir="ltr" className={pnlPercent >= 0 ? 'text-green-500' : 'text-red-500'}>
-                          {holding.current_price ? `${pnlPercent >= 0 ? '+' : ''}${pnlPercent.toFixed(1)}%` : '—'}
                         </TableCell>
                         <TableCell>
                           <DropdownMenu>
@@ -389,16 +386,19 @@ export default function Invest() {
                       <TableBody>
                         {group.catHoldings.map(h => {
                           const cp = h.current_price ?? h.average_cost;
-                          const vILS = getValueILS(h);
-                          const plILS = getPnlILS(h);
+                          const val = h.quantity * cp;
+                          const cost = h.quantity * h.average_cost;
+                          const pnlN = val - cost;
+                          const pnlPct = cost > 0 ? (pnlN / cost) * 100 : 0;
+                          const cs = getCurrencySymbol(h.currency || "ILS");
                           return (
                             <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
                               <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
                               <TableCell>{h.name}</TableCell>
                               <TableCell dir="ltr">{h.quantity.toLocaleString()}</TableCell>
-                              <TableCell dir="ltr">₪{vILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                              <TableCell dir="ltr" className={plILS >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                {h.current_price ? `${plILS >= 0 ? '+' : ''}₪${plILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                              <TableCell dir="ltr">{cs}{val.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                              <TableCell dir="ltr" className={pnlN >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                {h.current_price ? `${pnlN >= 0 ? '+' : ''}${cs}${pnlN.toLocaleString(undefined, { maximumFractionDigits: 0 })} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : '—'}
                               </TableCell>
                             </TableRow>
                           );
@@ -417,16 +417,20 @@ export default function Invest() {
                     <Table>
                       <TableBody>
                         {uncategorizedHoldings.map(h => {
-                          const vILS = getValueILS(h);
-                          const plILS = getPnlILS(h);
+                          const cp = h.current_price ?? h.average_cost;
+                          const val = h.quantity * cp;
+                          const cost = h.quantity * h.average_cost;
+                          const pnlN = val - cost;
+                          const pnlPct = cost > 0 ? (pnlN / cost) * 100 : 0;
+                          const cs = getCurrencySymbol(h.currency || "ILS");
                           return (
                             <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
                               <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
                               <TableCell>{h.name}</TableCell>
                               <TableCell dir="ltr">{h.quantity.toLocaleString()}</TableCell>
-                              <TableCell dir="ltr">₪{vILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
-                              <TableCell dir="ltr" className={plILS >= 0 ? 'text-green-500' : 'text-red-500'}>
-                                {h.current_price ? `${plILS >= 0 ? '+' : ''}₪${plILS.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                              <TableCell dir="ltr">{cs}{val.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
+                              <TableCell dir="ltr" className={pnlN >= 0 ? 'text-green-500' : 'text-red-500'}>
+                                {h.current_price ? `${pnlN >= 0 ? '+' : ''}${cs}${pnlN.toLocaleString(undefined, { maximumFractionDigits: 0 })} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : '—'}
                               </TableCell>
                             </TableRow>
                           );

@@ -113,6 +113,7 @@ export default function Allocations() {
           const val = h.quantity * price;
           const cost = h.quantity * h.average_cost;
           const pnl = val - cost;
+          const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
           return (
             <TableRow key={h.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/holding/${h.id}`)}>
               <TableCell className="font-medium" dir="ltr">{h.fund_number || h.symbol}</TableCell>
@@ -120,7 +121,7 @@ export default function Allocations() {
               <TableCell dir="ltr">{h.quantity.toLocaleString()}</TableCell>
               <TableCell dir="ltr">{curr}{val.toLocaleString(undefined, { maximumFractionDigits: 0 })}</TableCell>
               <TableCell dir="ltr" className={pnl >= 0 ? 'text-green-500' : 'text-red-500'}>
-                {h.current_price ? `${pnl >= 0 ? '+' : ''}${curr}${pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}
+                {h.current_price ? `${pnl >= 0 ? '+' : ''}${curr}${pnl.toLocaleString(undefined, { maximumFractionDigits: 0 })} (${pnlPct >= 0 ? '+' : ''}${pnlPct.toFixed(1)}%)` : '—'}
               </TableCell>
               <TableCell>
                 <ExternalLink className="h-3 w-3 text-muted-foreground" />
