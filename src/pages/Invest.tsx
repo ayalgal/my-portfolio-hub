@@ -265,6 +265,11 @@ export default function Invest() {
                         <TableCell>{holding.name}</TableCell>
                         <TableCell>{getAssetTypeLabel(holding.asset_type)}</TableCell>
                         <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {holding.broker === 'IBKR' ? 'IBKR' : holding.broker === 'ONE_ZERO' ? 'One Zero' : holding.broker || '—'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {holdingCats.map((hc) => (
                               <Badge
