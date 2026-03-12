@@ -3,7 +3,9 @@ import { useState, useMemo } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ArrowUpDown, ArrowUp, ArrowDown, Search } from "lucide-react";
 import type { GroupBy } from "./DividendFilters";
 import { getDividendChangeInfo, buildDividendPreviousMap } from "./DividendChangeArrow";
 
@@ -41,9 +43,7 @@ const getExchangeRate = (currency: string | null) => {
 
 function groupDividends(dividends: DividendWithHolding[], groupBy: GroupBy): GroupedData[] {
   if (groupBy === "all") return [];
-
   const groups = new Map<string, DividendWithHolding[]>();
-
   for (const d of dividends) {
     let key: string;
     if (groupBy === "holding") {
@@ -63,16 +63,16 @@ function groupDividends(dividends: DividendWithHolding[], groupBy: GroupBy): Gro
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(d);
   }
-
   const result: GroupedData[] = [];
   for (const [label, items] of groups) {
     const totalAmount = items.reduce((s, d) => s + d.amount * getExchangeRate(d.currency), 0);
     const totalTax = items.reduce((s, d) => s + (d.tax_withheld || 0) * getExchangeRate(d.currency), 0);
     result.push({ label, dividends: items, totalAmount, totalTax, count: items.length });
   }
-
   return result.sort((a, b) => b.label.localeCompare(a.label));
 }
+
+type SortField = "date" | "symbol" | "amount" | "shares" | "tax";
 
 interface DividendTableProps {
   dividends: DividendWithHolding[];
@@ -80,7 +80,10 @@ interface DividendTableProps {
 }
 
 export function DividendTable({ dividends, groupBy }: DividendTableProps) {
-  // Year filter
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [filterText, setFilterText] = useState("");
+
   const years = useMemo(() => {
     const yrs = new Set<number>();
     dividends.forEach(d => { if (d.payment_date) yrs.add(new Date(d.payment_date).getFullYear()); });
@@ -89,36 +92,101 @@ export function DividendTable({ dividends, groupBy }: DividendTableProps) {
 
   const [selectedYear, setSelectedYear] = useState<number | "all">(() => years[0] || new Date().getFullYear());
 
-  const filtered = useMemo(() => {
-    if (selectedYear === "all") return dividends;
-    return dividends.filter(d => {
-      if (!d.payment_date) return false;
-      return new Date(d.payment_date).getFullYear() === selectedYear;
-    });
-  }, [dividends, selectedYear]);
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("desc"); }
+  };
 
-  const prevMap = useMemo(() => buildDividendPreviousMap(filtered), [filtered]);
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+    return sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />;
+  };
+
+  const filtered = useMemo(() => {
+    let result = dividends;
+    if (selectedYear !== "all") {
+      result = result.filter(d => d.payment_date && new Date(d.payment_date).getFullYear() === selectedYear);
+    }
+    if (filterText) {
+      const q = filterText.toLowerCase();
+      result = result.filter(d =>
+        (d.holdings?.symbol || "").toLowerCase().includes(q) ||
+        (d.holdings?.name || "").toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [dividends, selectedYear, filterText]);
+
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      switch (sortField) {
+        case "date": cmp = (a.payment_date || "").localeCompare(b.payment_date || ""); break;
+        case "symbol": cmp = (a.holdings?.symbol || "").localeCompare(b.holdings?.symbol || ""); break;
+        case "amount": cmp = a.amount - b.amount; break;
+        case "shares": cmp = (a.shares_at_payment || 0) - (b.shares_at_payment || 0); break;
+        case "tax": cmp = (a.tax_withheld || 0) - (b.tax_withheld || 0); break;
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [filtered, sortField, sortDir]);
+
+  const prevMap = useMemo(() => buildDividendPreviousMap(sorted), [sorted]);
 
   if (dividends.length === 0) {
     return <p className="text-center text-muted-foreground py-8">אין דיבידנדים עדיין</p>;
   }
 
-  const yearSelector = (
-    <div className="flex items-center gap-1 mb-4 flex-wrap">
-      <Button variant={selectedYear === "all" ? "default" : "ghost"} size="sm" onClick={() => setSelectedYear("all")}>הכל</Button>
-      {years.map(y => (
-        <Button key={y} variant={y === selectedYear ? "default" : "ghost"} size="sm" onClick={() => setSelectedYear(y)}>
-          {y}
-        </Button>
-      ))}
+  const controls = (
+    <div className="flex items-center gap-2 mb-4 flex-wrap">
+      <div className="flex items-center gap-1 flex-wrap">
+        <Button variant={selectedYear === "all" ? "default" : "ghost"} size="sm" onClick={() => setSelectedYear("all")}>הכל</Button>
+        {years.map(y => (
+          <Button key={y} variant={y === selectedYear ? "default" : "ghost"} size="sm" onClick={() => setSelectedYear(y)}>
+            {y}
+          </Button>
+        ))}
+      </div>
+      <div className="relative w-40 mr-auto">
+        <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="חיפוש..."
+          value={filterText}
+          onChange={e => setFilterText(e.target.value)}
+          className="pr-9 h-8 text-sm"
+        />
+      </div>
     </div>
   );
 
+  const tableHeaders = (
+    <TableHeader>
+      <TableRow>
+        <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("date")}>
+          <span className="flex items-center gap-1">תאריך <SortIcon field="date" /></span>
+        </TableHead>
+        <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("symbol")}>
+          <span className="flex items-center gap-1">נייר ערך <SortIcon field="symbol" /></span>
+        </TableHead>
+        <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("amount")}>
+          <span className="flex items-center gap-1">סכום <SortIcon field="amount" /></span>
+        </TableHead>
+        <TableHead className="text-right w-10">שינוי</TableHead>
+        <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("shares")}>
+          <span className="flex items-center gap-1">מניות <SortIcon field="shares" /></span>
+        </TableHead>
+        <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("tax")}>
+          <span className="flex items-center gap-1">מס <SortIcon field="tax" /></span>
+        </TableHead>
+      </TableRow>
+    </TableHeader>
+  );
+
   if (groupBy !== "all") {
-    const groups = groupDividends(filtered, groupBy);
+    const groups = groupDividends(sorted, groupBy);
     return (
       <TooltipProvider>
-        {yearSelector}
+        {controls}
         <div className="space-y-4">
           {groups.map((g) => (
             <div key={g.label} className="rounded-lg border">
@@ -131,17 +199,7 @@ export function DividendTable({ dividends, groupBy }: DividendTableProps) {
                 </div>
               </div>
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">תאריך</TableHead>
-                    <TableHead className="text-right">נייר ערך</TableHead>
-                    <TableHead className="text-right">סכום</TableHead>
-                    <TableHead className="text-right w-10">שינוי</TableHead>
-                    <TableHead className="text-right">מניות</TableHead>
-                    <TableHead className="text-right">מס</TableHead>
-                    <TableHead className="text-right">סוג</TableHead>
-                  </TableRow>
-                </TableHeader>
+                {tableHeaders}
                 <TableBody>
                   {g.dividends.map((d) => <DividendRow key={d.id} d={d} prevMap={prevMap} />)}
                 </TableBody>
@@ -155,21 +213,11 @@ export function DividendTable({ dividends, groupBy }: DividendTableProps) {
 
   return (
     <TooltipProvider>
-      {yearSelector}
+      {controls}
       <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="text-right">תאריך</TableHead>
-            <TableHead className="text-right">נייר ערך</TableHead>
-            <TableHead className="text-right">סכום</TableHead>
-            <TableHead className="text-right w-10">שינוי</TableHead>
-            <TableHead className="text-right">מניות</TableHead>
-            <TableHead className="text-right">מס</TableHead>
-            <TableHead className="text-right">סוג</TableHead>
-          </TableRow>
-        </TableHeader>
+        {tableHeaders}
         <TableBody>
-          {filtered.map((d) => <DividendRow key={d.id} d={d} prevMap={prevMap} />)}
+          {sorted.map((d) => <DividendRow key={d.id} d={d} prevMap={prevMap} />)}
         </TableBody>
       </Table>
     </TooltipProvider>
@@ -206,11 +254,6 @@ function DividendRow({ d, prevMap }: { d: DividendWithHolding; prevMap: Map<stri
       </TableCell>
       <TableCell dir="ltr">{d.shares_at_payment || "-"}</TableCell>
       <TableCell dir="ltr" className="text-muted-foreground">{cs}{(d.tax_withheld || 0).toFixed(2)}</TableCell>
-      <TableCell>
-        <Badge variant={d.is_israeli ? "default" : "secondary"}>
-          {d.is_israeli ? "ישראלי" : "בינלאומי"}
-        </Badge>
-      </TableCell>
     </TableRow>
   );
 }
