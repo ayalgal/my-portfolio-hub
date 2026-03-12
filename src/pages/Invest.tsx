@@ -145,6 +145,7 @@ export default function Invest() {
                 case "symbol": return h.symbol;
                 case "name": return h.name;
                 case "type": return h.asset_type;
+                case "broker": return h.broker || "zzz";
                 case "category": {
                   const cats = getCategoriesForHolding(h.id);
                   return cats.length > 0 ? (cats[0] as any).allocation_categories?.name || "" : "zzz";
