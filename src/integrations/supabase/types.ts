@@ -158,6 +158,7 @@ export type Database = {
         Row: {
           asset_type: string
           average_cost: number
+          broker: string | null
           created_at: string | null
           currency: string | null
           current_price: number | null
@@ -175,6 +176,7 @@ export type Database = {
         Insert: {
           asset_type?: string
           average_cost?: number
+          broker?: string | null
           created_at?: string | null
           currency?: string | null
           current_price?: number | null
@@ -192,6 +194,7 @@ export type Database = {
         Update: {
           asset_type?: string
           average_cost?: number
+          broker?: string | null
           created_at?: string | null
           currency?: string | null
           current_price?: number | null

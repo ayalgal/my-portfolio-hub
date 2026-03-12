@@ -145,6 +145,7 @@ export default function Invest() {
                 case "symbol": return h.symbol;
                 case "name": return h.name;
                 case "type": return h.asset_type;
+                case "broker": return h.broker || "zzz";
                 case "category": {
                   const cats = getCategoriesForHolding(h.id);
                   return cats.length > 0 ? (cats[0] as any).allocation_categories?.name || "" : "zzz";
@@ -223,6 +224,9 @@ export default function Invest() {
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("type")}>
                       <span className="flex items-center gap-1">סוג <SortIcon field="type" /></span>
                     </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("broker")}>
+                      <span className="flex items-center gap-1">ברוקר <SortIcon field="broker" /></span>
+                    </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("category")}>
                       <span className="flex items-center gap-1">קטגוריות <SortIcon field="category" /></span>
                     </TableHead>
@@ -261,6 +265,11 @@ export default function Invest() {
                         </TableCell>
                         <TableCell>{holding.name}</TableCell>
                         <TableCell>{getAssetTypeLabel(holding.asset_type)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {holding.broker === 'IBKR' ? 'IBKR' : holding.broker === 'ONE_ZERO' ? 'One Zero' : holding.broker || '—'}
+                          </Badge>
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
                             {holdingCats.map((hc) => (

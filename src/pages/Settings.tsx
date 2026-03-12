@@ -34,6 +34,7 @@ export default function Settings() {
       display_name: displayName,
       preferred_currency: currency,
     });
+    toast({ title: "נשמר בהצלחה", description: "ההגדרות עודכנו" });
   };
 
   const handleResetData = async () => {
@@ -64,14 +65,14 @@ export default function Settings() {
           <p className="text-muted-foreground">נהל את הגדרות החשבון שלך</p>
         </div>
 
-        {/* Profile Settings */}
+        {/* Profile & Preferences combined */}
         <Card>
           <CardHeader>
             <div className="flex items-center gap-3">
               <User className="w-5 h-5 text-muted-foreground" />
               <div>
-                <CardTitle>פרופיל</CardTitle>
-                <CardDescription>פרטי החשבון שלך</CardDescription>
+                <CardTitle>פרופיל והעדפות</CardTitle>
+                <CardDescription>פרטי החשבון והתאמה אישית</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -85,12 +86,7 @@ export default function Settings() {
               <>
                 <div className="space-y-2">
                   <Label htmlFor="email">אימייל</Label>
-                  <Input 
-                    id="email" 
-                    value={user?.email || ""} 
-                    disabled 
-                    dir="ltr"
-                  />
+                  <Input id="email" value={user?.email || ""} disabled dir="ltr" />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="displayName">שם תצוגה</Label>
@@ -101,42 +97,32 @@ export default function Settings() {
                     placeholder="השם שלך"
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="currency">
+                    <Globe className="inline w-4 h-4 ml-1" />
+                    מטבע ברירת מחדל
+                  </Label>
+                  <Select value={currency} onValueChange={setCurrency}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ILS">₪ שקל ישראלי</SelectItem>
+                      <SelectItem value="USD">$ דולר אמריקאי</SelectItem>
+                      <SelectItem value="CAD">C$ דולר קנדי</SelectItem>
+                      <SelectItem value="EUR">€ אירו</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button 
                   onClick={handleSaveProfile}
                   disabled={updateProfile.isPending}
+                  className="w-full"
                 >
                   {updateProfile.isPending ? "שומר..." : "שמור שינויים"}
                 </Button>
               </>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Preferences */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-3">
-              <Globe className="w-5 h-5 text-muted-foreground" />
-              <div>
-                <CardTitle>העדפות</CardTitle>
-                <CardDescription>התאמה אישית של האפליקציה</CardDescription>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="currency">מטבע ברירת מחדל</Label>
-              <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ILS">₪ שקל ישראלי</SelectItem>
-                  <SelectItem value="USD">$ דולר אמריקאי</SelectItem>
-                  <SelectItem value="EUR">€ אירו</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </CardContent>
         </Card>
 

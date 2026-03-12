@@ -50,6 +50,9 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
       averageCost = parseFloat(formData.get("averageCost") as string) || 0;
     }
 
+    const brokerVal = formData.get("broker") as string;
+    const broker = brokerVal === "none" ? null : brokerVal;
+
     createHolding.mutate({
       symbol: fundNumber || (formData.get("symbol") as string),
       name,
@@ -60,6 +63,7 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
       currency,
       portfolio_id: defaultPortfolioId,
       fund_number: fundNumber || null,
+      broker,
     }, {
       onSuccess: () => {
         onOpenChange(false);
@@ -167,17 +171,31 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="currency">מטבע</Label>
-            <Select name="currency" defaultValue={isBankSavings ? "ILS" : "ILS"}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ILS">₪ שקל</SelectItem>
-                <SelectItem value="USD">$ דולר</SelectItem>
-                <SelectItem value="CAD">C$ דולר קנדי</SelectItem>
-                <SelectItem value="EUR">€ אירו</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="currency">מטבע</Label>
+              <Select name="currency" defaultValue={isBankSavings ? "ILS" : "USD"}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ILS">₪ שקל</SelectItem>
+                  <SelectItem value="USD">$ דולר</SelectItem>
+                  <SelectItem value="CAD">C$ דולר קנדי</SelectItem>
+                  <SelectItem value="EUR">€ אירו</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="broker">ברוקר</Label>
+              <Select name="broker" defaultValue="none">
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">ללא</SelectItem>
+                  <SelectItem value="IBKR">IBKR</SelectItem>
+                  <SelectItem value="ONE_ZERO">One Zero</SelectItem>
+                  <SelectItem value="other">אחר</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <Button type="submit" className="w-full" disabled={createHolding.isPending}>
             {createHolding.isPending ? "מוסיף..." : "הוסף"}
