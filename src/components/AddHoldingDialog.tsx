@@ -169,7 +169,7 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
 
           <div className="space-y-2">
             <Label htmlFor="currency">מטבע</Label>
-            <Select name="currency" defaultValue={isBankSavings ? "ILS" : "ILS"}>
+            <Select name="currency" defaultValue={isBankSavings ? "ILS" : "USD"}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="ILS">₪ שקל</SelectItem>

@@ -58,6 +58,7 @@ export default function Dividends() {
 
   const totalDividendsILS = dividends.reduce((sum, d) => sum + convertToILS(d.amount, d.currency || "ILS"), 0);
   const totalTaxILS = dividends.reduce((sum, d) => sum + convertToILS(d.tax_withheld || 0, d.currency || "ILS"), 0);
+  const totalNetILS = totalDividendsILS - totalTaxILS;
 
   return (
     <AppLayout>
@@ -78,7 +79,19 @@ export default function Dividends() {
                 <SelectItem value="CAD">C$ קנדי</SelectItem>
               </SelectContent>
             </Select>
-            <DividendFilters groupBy={groupBy} onGroupByChange={setGroupBy} taxRate={taxRate} onTaxRateChange={setTaxRate} />
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">שיעור מס (%)</Label>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={0.5}
+                value={taxRate}
+                onChange={(e) => setTaxRate(parseFloat(e.target.value) || 0)}
+                className="w-[90px]"
+                dir="ltr"
+              />
+            </div>
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
                 <Button><Plus className="ml-2 h-4 w-4" />הוסף דיבידנד</Button>
@@ -130,17 +143,17 @@ export default function Dividends() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">סה״כ דיבידנדים</CardTitle>
+              <CardTitle className="text-sm font-medium">סה״כ דיבידנדים (ברוטו)</CardTitle>
               <DollarSign className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
               {isLoading ? <Skeleton className="h-8 w-24" /> : (
                 <>
                   <div className="text-2xl font-bold text-green-500">{fmt(totalDividendsILS)}</div>
-                  <p className="text-xs text-muted-foreground">מ-{dividends.length} תשלומים</p>
+                  <p className="text-xs text-muted-foreground">מ-{dividends.length} תשלומים · לפני מס</p>
                 </>
               )}
             </CardContent>
@@ -159,6 +172,20 @@ export default function Dividends() {
               )}
             </CardContent>
           </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">סה״כ נטו (אחרי מס)</CardTitle>
+              <DollarSign className="h-4 w-4 text-blue-500" />
+            </CardHeader>
+            <CardContent>
+              {isLoading ? <Skeleton className="h-8 w-24" /> : (
+                <>
+                  <div className="text-2xl font-bold text-blue-500">{fmt(totalNetILS)}</div>
+                  <p className="text-xs text-muted-foreground">אחרי ניכוי מס {taxRate}%</p>
+                </>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <Tabs defaultValue="history" dir="rtl">
@@ -170,8 +197,13 @@ export default function Dividends() {
           <TabsContent value="history">
             <Card>
               <CardHeader>
-                <CardTitle>היסטוריית דיבידנדים</CardTitle>
-                <CardDescription>כל הדיבידנדים שהתקבלו</CardDescription>
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <CardTitle>היסטוריית דיבידנדים</CardTitle>
+                    <CardDescription>כל הדיבידנדים שהתקבלו</CardDescription>
+                  </div>
+                  <DividendFilters groupBy={groupBy} onGroupByChange={setGroupBy} taxRate={taxRate} onTaxRateChange={setTaxRate} />
+                </div>
               </CardHeader>
               <CardContent>
                 {isLoading ? <Skeleton className="h-40 w-full" /> : (
