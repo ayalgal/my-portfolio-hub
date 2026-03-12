@@ -275,7 +275,7 @@ export default function Dashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">רווח/הפסד</CardTitle>
+              <CardTitle className="text-sm font-medium">רווח/הפסד (הון)</CardTitle>
               {totalGainILS >= 0 ? <TrendingUp className="h-4 w-4 text-green-500" /> : <TrendingDown className="h-4 w-4 text-red-500" />}
             </CardHeader>
             <CardContent>
@@ -287,6 +287,13 @@ export default function Dashboard() {
                   <p className={`text-xs ${totalGainPercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%
                   </p>
+                  {totalDividendsILS > 0 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      כולל דיבידנדים: <span className={(totalGainILS + totalDividendsILS) >= 0 ? 'text-green-500' : 'text-red-500'}>
+                        {(totalGainILS + totalDividendsILS) >= 0 ? '+' : ''}{formatAmount(totalGainILS + totalDividendsILS)}
+                      </span>
+                    </p>
+                  )}
                   {!hasCurrentPrices && holdings.length > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">לחץ ↻ לעדכון מחירים</p>
                   )}

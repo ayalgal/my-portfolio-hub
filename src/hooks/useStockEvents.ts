@@ -65,12 +65,26 @@ export function useStockEvents() {
     },
   });
 
+  const dismissEvent = useMutation({
+    mutationFn: async (eventId: string) => {
+      const { error } = await supabase
+        .from("stock_events")
+        .delete()
+        .eq("id", eventId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stock_events"] });
+    },
+  });
+
   return {
     events: eventsQuery.data ?? [],
     unreadCount,
     isLoading: eventsQuery.isLoading,
     markAsRead,
     markAllAsRead,
+    dismissEvent,
     refetch: eventsQuery.refetch,
   };
 }

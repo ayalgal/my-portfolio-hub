@@ -1,53 +1,40 @@
+import { useState } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowUpRight, ArrowDownRight, RefreshCw, DollarSign, Clock } from "lucide-react";
 import { useTransactions } from "@/hooks/useTransactions";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const getTypeConfig = (type: string) => {
   const configs: Record<string, { label: string; icon: any; color: string; bgColor: string }> = {
-    buy: {
-      label: "קנייה",
-      icon: ArrowDownRight,
-      color: "text-green-500",
-      bgColor: "bg-green-500/10",
-    },
-    sell: {
-      label: "מכירה",
-      icon: ArrowUpRight,
-      color: "text-red-500",
-      bgColor: "bg-red-500/10",
-    },
-    dividend: {
-      label: "דיבידנד",
-      icon: DollarSign,
-      color: "text-blue-500",
-      bgColor: "bg-blue-500/10",
-    },
-    split: {
-      label: "ספליט",
-      icon: RefreshCw,
-      color: "text-purple-500",
-      bgColor: "bg-purple-500/10",
-    },
-    reverse_split: {
-      label: "ריברס ספליט",
-      icon: RefreshCw,
-      color: "text-orange-500",
-      bgColor: "bg-orange-500/10",
-    },
+    buy: { label: "קנייה", icon: ArrowDownRight, color: "text-green-500", bgColor: "bg-green-500/10" },
+    sell: { label: "מכירה", icon: ArrowUpRight, color: "text-red-500", bgColor: "bg-red-500/10" },
+    dividend: { label: "דיבידנד", icon: DollarSign, color: "text-blue-500", bgColor: "bg-blue-500/10" },
+    split: { label: "ספליט", icon: RefreshCw, color: "text-purple-500", bgColor: "bg-purple-500/10" },
+    reverse_split: { label: "ריברס ספליט", icon: RefreshCw, color: "text-orange-500", bgColor: "bg-orange-500/10" },
   };
   return configs[type] || configs.buy;
 };
 
 const getCurrencySymbol = (currency: string | null) => {
-  const symbols: Record<string, string> = { ILS: "₪", USD: "$", EUR: "€" };
+  const symbols: Record<string, string> = { ILS: "₪", USD: "$", EUR: "€", CAD: "C$" };
   return symbols[currency || "ILS"] || currency || "₪";
 };
 
+type TxFilter = "all" | "buy" | "sell" | "dividend" | "split";
+
 export default function Activity() {
   const { transactions, isLoading } = useTransactions();
+  const [filter, setFilter] = useState<TxFilter>("all");
+
+  const filtered = filter === "all"
+    ? transactions
+    : transactions.filter((t: any) => {
+        if (filter === "split") return t.transaction_type === "split" || t.transaction_type === "reverse_split";
+        return t.transaction_type === filter;
+      });
 
   return (
     <AppLayout>
@@ -59,8 +46,21 @@ export default function Activity() {
 
         <Card>
           <CardHeader>
-            <CardTitle>היסטוריית פעילות</CardTitle>
-            <CardDescription>כל העסקאות והפעולות שבוצעו</CardDescription>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <CardTitle>היסטוריית פעילות</CardTitle>
+                <CardDescription>כל העסקאות והפעולות שבוצעו</CardDescription>
+              </div>
+              <Tabs value={filter} onValueChange={(v) => setFilter(v as TxFilter)} dir="rtl">
+                <TabsList>
+                  <TabsTrigger value="all">הכל</TabsTrigger>
+                  <TabsTrigger value="buy">קנייה</TabsTrigger>
+                  <TabsTrigger value="sell">מכירה</TabsTrigger>
+                  <TabsTrigger value="dividend">דיבידנד</TabsTrigger>
+                  <TabsTrigger value="split">ספליט</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -69,17 +69,17 @@ export default function Activity() {
                 <Skeleton className="h-16 w-full" />
                 <Skeleton className="h-16 w-full" />
               </div>
-            ) : transactions.length === 0 ? (
+            ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12">
                 <Clock className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">אין פעילות עדיין</h3>
+                <h3 className="text-lg font-semibold mb-2">{filter === "all" ? "אין פעילות עדיין" : "אין עסקאות מסוג זה"}</h3>
                 <p className="text-muted-foreground text-center">
-                  עסקאות יוצגו כאן לאחר רישום
+                  {filter === "all" ? "עסקאות יוצגו כאן לאחר רישום" : "נסה לבחור סוג אחר"}
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
-                {transactions.map((transaction: any) => {
+                {filtered.map((transaction: any) => {
                   const config = getTypeConfig(transaction.transaction_type);
                   const Icon = config.icon;
                   const currencySymbol = getCurrencySymbol(transaction.currency);

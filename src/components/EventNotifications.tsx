@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, SplitSquareVertical, TrendingUp, TrendingDown, AlertTriangle, DollarSign, CheckCheck } from "lucide-react";
+import { Bell, SplitSquareVertical, TrendingUp, TrendingDown, AlertTriangle, DollarSign, CheckCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -17,7 +17,7 @@ const eventIcons: Record<string, React.ReactNode> = {
 };
 
 export function EventNotifications() {
-  const { events, unreadCount, markAsRead, markAllAsRead } = useStockEvents();
+  const { events, unreadCount, markAsRead, markAllAsRead, dismissEvent } = useStockEvents();
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -50,30 +50,47 @@ export function EventNotifications() {
             </Button>
           )}
         </div>
-        <ScrollArea className="max-h-80">
+        <ScrollArea className="max-h-[400px]">
           {events.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-8">אין התראות</p>
           ) : (
             <div className="divide-y">
               {events.map((event) => (
-                <button
+                <div
                   key={event.id}
-                  className={`w-full text-right px-4 py-3 hover:bg-muted/50 transition-colors flex gap-3 items-start ${!event.is_read ? 'bg-primary/5' : ''}`}
-                  onClick={() => handleEventClick(event)}
+                  className={`relative w-full text-right px-4 py-3 hover:bg-muted/50 transition-colors flex gap-3 items-start ${!event.is_read ? 'bg-primary/5' : ''}`}
                 >
-                  <div className="mt-0.5">{eventIcons[event.event_type] || <AlertTriangle className="h-4 w-4" />}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-sm">{event.title}</span>
-                      {!event.is_read && <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />}
+                  <button
+                    className="flex-1 flex gap-3 items-start text-right"
+                    onClick={() => handleEventClick(event)}
+                  >
+                    <div className="mt-0.5">{eventIcons[event.event_type] || <AlertTriangle className="h-4 w-4" />}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{event.title}</span>
+                        {!event.is_read && <span className="h-2 w-2 rounded-full bg-primary flex-shrink-0" />}
+                      </div>
+                      {event.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{event.description}</p>}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {event.event_date ? new Date(event.event_date).toLocaleDateString('he-IL') : ''}
+                        {event.created_at && ` · ${new Date(event.created_at).toLocaleDateString('he-IL')}`}
+                      </p>
                     </div>
-                    {event.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{event.description}</p>}
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {event.event_date ? new Date(event.event_date).toLocaleDateString('he-IL') : ''}
-                      {event.created_at && ` · ${new Date(event.created_at).toLocaleDateString('he-IL')}`}
-                    </p>
-                  </div>
-                </button>
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 flex-shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100 hover:bg-destructive/10"
+                    style={{ opacity: undefined }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dismissEvent.mutate(event.id);
+                    }}
+                    title="הסר התראה"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                  </Button>
+                </div>
               ))}
             </div>
           )}
