@@ -223,6 +223,9 @@ export default function Invest() {
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("type")}>
                       <span className="flex items-center gap-1">סוג <SortIcon field="type" /></span>
                     </TableHead>
+                    <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("broker")}>
+                      <span className="flex items-center gap-1">ברוקר <SortIcon field="broker" /></span>
+                    </TableHead>
                     <TableHead className="text-right cursor-pointer select-none" onClick={() => toggleSort("category")}>
                       <span className="flex items-center gap-1">קטגוריות <SortIcon field="category" /></span>
                     </TableHead>
