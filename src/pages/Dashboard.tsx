@@ -40,7 +40,7 @@ export default function Dashboard() {
   const { categories } = useAllocations();
   const { holdingCategories } = useHoldingCategories();
   const { portfolios } = usePortfolio();
-  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('ILS');
+  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>('USD');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [showSP500, setShowSP500] = useState(true);
