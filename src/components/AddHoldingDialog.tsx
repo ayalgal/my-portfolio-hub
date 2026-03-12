@@ -50,6 +50,9 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
       averageCost = parseFloat(formData.get("averageCost") as string) || 0;
     }
 
+    const brokerVal = formData.get("broker") as string;
+    const broker = brokerVal === "none" ? null : brokerVal;
+
     createHolding.mutate({
       symbol: fundNumber || (formData.get("symbol") as string),
       name,
@@ -60,6 +63,7 @@ export function AddHoldingDialog({ open, onOpenChange }: AddHoldingDialogProps) 
       currency,
       portfolio_id: defaultPortfolioId,
       fund_number: fundNumber || null,
+      broker,
     }, {
       onSuccess: () => {
         onOpenChange(false);
