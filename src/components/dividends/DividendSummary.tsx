@@ -390,9 +390,37 @@ export function DividendSummary({ dividends, holdingCategories, view = "monthly"
     );
   }
 
+  const rangeOptions = [
+    { value: "all", label: "הכל" },
+    { value: "thisMonth", label: "חודש נוכחי" },
+    { value: "lastMonth", label: "חודש קודם" },
+    { value: "last3Months", label: "3 חודשים" },
+    { value: "thisQuarter", label: "רבעון נוכחי" },
+    { value: "lastQuarter", label: "רבעון קודם" },
+    { value: "thisYear", label: `${new Date().getFullYear()}` },
+    { value: "lastYear", label: `${new Date().getFullYear() - 1}` },
+    { value: "last12Months", label: "12 חודשים" },
+  ];
+
   // view === "summary"
   return (
     <div className="space-y-6">
+      {/* Date range filter */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm text-muted-foreground">טווח:</span>
+        {rangeOptions.map((opt) => (
+          <Button
+            key={opt.value}
+            variant={summaryRange === opt.value ? "default" : "ghost"}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setSummaryRange(opt.value)}
+          >
+            {opt.label}
+          </Button>
+        ))}
+      </div>
+
       {/* Summary tabs */}
       <Tabs defaultValue="byHolding" dir="rtl">
         <TabsList>
