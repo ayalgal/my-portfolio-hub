@@ -50,7 +50,7 @@ interface Props {
   view?: "monthly" | "summary";
 }
 
-export function DividendSummary({ dividends, holdingCategories, view = "forecast" }: Props) {
+export function DividendSummary({ dividends, holdingCategories, view = "monthly" }: Props) {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>("USD");
 
