@@ -111,21 +111,34 @@ export default function Activity() {
                         </p>
                       </div>
                       
-                      <div className="text-left">
+                        <div className="text-left">
                         {transaction.transaction_type !== 'split' && transaction.transaction_type !== 'reverse_split' ? (
-                          <>
-                            <div className={`font-semibold ${
-                              transaction.transaction_type === 'sell' ? 'text-red-500' : 
-                              transaction.transaction_type === 'buy' ? 'text-green-500' : 
-                              'text-blue-500'
-                            }`}>
-                              {transaction.transaction_type === 'sell' ? '+' : transaction.transaction_type === 'buy' ? '-' : '+'}
-                              {currencySymbol}{transaction.total_amount?.toLocaleString() || 0}
-                            </div>
-                            <p className="text-xs text-muted-foreground" dir="ltr">
-                              {transaction.quantity} × {currencySymbol}{transaction.price}
-                            </p>
-                          </>
+                          (() => {
+                            const currentPrice = transaction.holdings?.current_price ?? transaction.price;
+                            const pnlPerUnit = currentPrice - transaction.price;
+                            const pnlPercent = transaction.price > 0 ? (pnlPerUnit / transaction.price) * 100 : 0;
+                            const showPnl = transaction.transaction_type === 'buy' && Math.abs(pnlPercent) > 0.01;
+                            return (
+                              <>
+                                <div className={`font-semibold ${
+                                  transaction.transaction_type === 'sell' ? 'text-red-500' : 
+                                  transaction.transaction_type === 'buy' ? 'text-green-500' : 
+                                  'text-blue-500'
+                                }`}>
+                                  {transaction.transaction_type === 'sell' ? '+' : transaction.transaction_type === 'buy' ? '-' : '+'}
+                                  {currencySymbol}{transaction.total_amount?.toLocaleString() || 0}
+                                  {showPnl && (
+                                    <span className={`text-xs mr-1 ${pnlPercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                                      ({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground" dir="ltr">
+                                  {transaction.quantity} × {currencySymbol}{transaction.price}
+                                </p>
+                              </>
+                            );
+                          })()
                         ) : (
                           <div className="font-medium text-orange-500">
                             {splitRatio}

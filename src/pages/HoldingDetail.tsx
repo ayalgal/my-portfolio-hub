@@ -225,6 +225,14 @@ export default function HoldingDetail() {
           </CardContent>
         </Card>
 
+        {/* Price History Chart */}
+        <PriceHistoryChart
+          holdingId={holding.id}
+          currentPrice={currentPrice}
+          averageCost={holding.average_cost}
+          currencySymbol={currSym}
+        />
+
         {/* Tabs: Transactions & Dividends */}
         <Tabs defaultValue="transactions" dir="rtl">
           <TabsList>
