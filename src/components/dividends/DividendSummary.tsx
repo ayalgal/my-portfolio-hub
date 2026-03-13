@@ -200,7 +200,7 @@ export function DividendSummary({ dividends, holdingCategories, view = "monthly"
         <Card>
           <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
             <div>
-              <CardTitle>צפי דיבידנד</CardTitle>
+              <CardTitle>פירוט חודשי</CardTitle>
               <CardDescription>
                 נטו אחרי מס
                 {prevYearTotal > 0 && (
