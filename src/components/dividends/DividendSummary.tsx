@@ -53,6 +53,7 @@ interface Props {
 export function DividendSummary({ dividends, holdingCategories, view = "monthly" }: Props) {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>("USD");
+  const [summaryRange, setSummaryRange] = useState<string>("all");
 
   const fmt = (amountILS: number) => {
     const val = convertFromILS(amountILS, displayCurrency);
