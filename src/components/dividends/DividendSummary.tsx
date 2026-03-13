@@ -193,7 +193,7 @@ export function DividendSummary({ dividends, holdingCategories, view = "monthly"
     </Select>
   );
 
-  if (view === "forecast") {
+  if (view === "monthly") {
     return (
       <div className="space-y-6">
         {/* Monthly history by year */}
