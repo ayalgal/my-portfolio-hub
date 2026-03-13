@@ -143,7 +143,7 @@ export function DividendSummary({ dividends, holdingCategories, view = "monthly"
       holdingToCats.set(hc.holding_id, prev);
     }
     const catMap = new Map<string, { name: string; color: string | null; totalGross: number; totalTax: number; count: number; holdings: Set<string> }>();
-    for (const d of dividends) {
+    for (const d of filteredDividends) {
       const cats = holdingToCats.get(d.holding_id) || [{ name: "ללא תיקייה", color: null, id: "uncategorized" }];
       const grossILS = convertToILS(d.amount, d.currency || "ILS");
       const taxILS = convertToILS(d.tax_withheld || 0, d.currency || "ILS");
@@ -154,7 +154,7 @@ export function DividendSummary({ dividends, holdingCategories, view = "monthly"
       }
     }
     return Array.from(catMap.values()).sort((a, b) => b.totalGross - a.totalGross);
-  }, [dividends, holdingCategories]);
+  }, [filteredDividends, holdingCategories]);
 
   // Available years
   const years = useMemo(() => {
