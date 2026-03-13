@@ -47,9 +47,10 @@ const convertFromILS = (amountILS: number, toCurrency: DisplayCurrency) => {
 interface Props {
   dividends: DividendWithHolding[];
   holdingCategories: HoldingCategory[];
+  view?: "forecast" | "summary";
 }
 
-export function DividendSummary({ dividends, holdingCategories }: Props) {
+export function DividendSummary({ dividends, holdingCategories, view = "forecast" }: Props) {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>("USD");
 
