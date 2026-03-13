@@ -60,13 +60,64 @@ export function DividendSummary({ dividends, holdingCategories, view = "monthly"
     return `${currSymbols[displayCurrency]}${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
 
+  // Filter dividends for summary based on range
+  const filteredDividends = useMemo(() => {
+    if (summaryRange === "all") return dividends;
+    const now = new Date();
+    let start: Date;
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentQuarter = Math.floor(currentMonth / 3);
+
+    switch (summaryRange) {
+      case "thisMonth":
+        start = new Date(currentYear, currentMonth, 1);
+        break;
+      case "lastMonth":
+        start = new Date(currentYear, currentMonth - 1, 1);
+        return dividends.filter(d => {
+          if (!d.payment_date) return false;
+          const date = new Date(d.payment_date);
+          return date.getMonth() === (currentMonth - 1 + 12) % 12 && (currentMonth === 0 ? date.getFullYear() === currentYear - 1 : date.getFullYear() === currentYear);
+        });
+      case "thisQuarter":
+        start = new Date(currentYear, currentQuarter * 3, 1);
+        break;
+      case "lastQuarter": {
+        const lqStart = new Date(currentYear, (currentQuarter - 1) * 3, 1);
+        const lqEnd = new Date(currentYear, currentQuarter * 3, 1);
+        return dividends.filter(d => {
+          if (!d.payment_date) return false;
+          const date = new Date(d.payment_date);
+          return date >= lqStart && date < lqEnd;
+        });
+      }
+      case "thisYear":
+        start = new Date(currentYear, 0, 1);
+        break;
+      case "lastYear":
+        return dividends.filter(d => d.payment_date && new Date(d.payment_date).getFullYear() === currentYear - 1);
+      case "last3Months":
+        start = new Date(now);
+        start.setMonth(start.getMonth() - 3);
+        break;
+      case "last12Months":
+        start = new Date(now);
+        start.setFullYear(start.getFullYear() - 1);
+        break;
+      default:
+        return dividends;
+    }
+    return dividends.filter(d => d.payment_date && new Date(d.payment_date) >= start);
+  }, [dividends, summaryRange]);
+
   // Summary per holding
   const holdingSummary = useMemo(() => {
     const map = new Map<string, {
       holdingId: string; symbol: string; name: string;
       totalGross: number; totalTax: number; count: number;
     }>();
-    for (const d of dividends) {
+    for (const d of filteredDividends) {
       const prev = map.get(d.holding_id);
       const grossILS = convertToILS(d.amount, d.currency || "ILS");
       const taxILS = convertToILS(d.tax_withheld || 0, d.currency || "ILS");
@@ -80,7 +131,7 @@ export function DividendSummary({ dividends, holdingCategories, view = "monthly"
       }
     }
     return Array.from(map.values()).sort((a, b) => b.totalGross - a.totalGross);
-  }, [dividends]);
+  }, [filteredDividends]);
 
   // Summary per category
   const categorySummary = useMemo(() => {
