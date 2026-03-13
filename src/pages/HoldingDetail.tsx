@@ -228,6 +228,9 @@ export default function HoldingDetail() {
         {/* Price History Chart */}
         <PriceHistoryChart
           holdingId={holding.id}
+          symbol={holding.symbol}
+          currency={holding.currency}
+          assetType={holding.asset_type}
           currentPrice={currentPrice}
           averageCost={holding.average_cost}
           currencySymbol={currSym}

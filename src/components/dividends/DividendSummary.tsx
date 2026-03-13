@@ -47,17 +47,69 @@ const convertFromILS = (amountILS: number, toCurrency: DisplayCurrency) => {
 interface Props {
   dividends: DividendWithHolding[];
   holdingCategories: HoldingCategory[];
-  view?: "forecast" | "summary";
+  view?: "monthly" | "summary";
 }
 
-export function DividendSummary({ dividends, holdingCategories, view = "forecast" }: Props) {
+export function DividendSummary({ dividends, holdingCategories, view = "monthly" }: Props) {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrency>("USD");
+  const [summaryRange, setSummaryRange] = useState<string>("all");
 
   const fmt = (amountILS: number) => {
     const val = convertFromILS(amountILS, displayCurrency);
     return `${currSymbols[displayCurrency]}${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   };
+
+  // Filter dividends for summary based on range
+  const filteredDividends = useMemo(() => {
+    if (summaryRange === "all") return dividends;
+    const now = new Date();
+    let start: Date;
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentQuarter = Math.floor(currentMonth / 3);
+
+    switch (summaryRange) {
+      case "thisMonth":
+        start = new Date(currentYear, currentMonth, 1);
+        break;
+      case "lastMonth":
+        start = new Date(currentYear, currentMonth - 1, 1);
+        return dividends.filter(d => {
+          if (!d.payment_date) return false;
+          const date = new Date(d.payment_date);
+          return date.getMonth() === (currentMonth - 1 + 12) % 12 && (currentMonth === 0 ? date.getFullYear() === currentYear - 1 : date.getFullYear() === currentYear);
+        });
+      case "thisQuarter":
+        start = new Date(currentYear, currentQuarter * 3, 1);
+        break;
+      case "lastQuarter": {
+        const lqStart = new Date(currentYear, (currentQuarter - 1) * 3, 1);
+        const lqEnd = new Date(currentYear, currentQuarter * 3, 1);
+        return dividends.filter(d => {
+          if (!d.payment_date) return false;
+          const date = new Date(d.payment_date);
+          return date >= lqStart && date < lqEnd;
+        });
+      }
+      case "thisYear":
+        start = new Date(currentYear, 0, 1);
+        break;
+      case "lastYear":
+        return dividends.filter(d => d.payment_date && new Date(d.payment_date).getFullYear() === currentYear - 1);
+      case "last3Months":
+        start = new Date(now);
+        start.setMonth(start.getMonth() - 3);
+        break;
+      case "last12Months":
+        start = new Date(now);
+        start.setFullYear(start.getFullYear() - 1);
+        break;
+      default:
+        return dividends;
+    }
+    return dividends.filter(d => d.payment_date && new Date(d.payment_date) >= start);
+  }, [dividends, summaryRange]);
 
   // Summary per holding
   const holdingSummary = useMemo(() => {
@@ -65,7 +117,7 @@ export function DividendSummary({ dividends, holdingCategories, view = "forecast
       holdingId: string; symbol: string; name: string;
       totalGross: number; totalTax: number; count: number;
     }>();
-    for (const d of dividends) {
+    for (const d of filteredDividends) {
       const prev = map.get(d.holding_id);
       const grossILS = convertToILS(d.amount, d.currency || "ILS");
       const taxILS = convertToILS(d.tax_withheld || 0, d.currency || "ILS");
@@ -79,7 +131,7 @@ export function DividendSummary({ dividends, holdingCategories, view = "forecast
       }
     }
     return Array.from(map.values()).sort((a, b) => b.totalGross - a.totalGross);
-  }, [dividends]);
+  }, [filteredDividends]);
 
   // Summary per category
   const categorySummary = useMemo(() => {
@@ -91,7 +143,7 @@ export function DividendSummary({ dividends, holdingCategories, view = "forecast
       holdingToCats.set(hc.holding_id, prev);
     }
     const catMap = new Map<string, { name: string; color: string | null; totalGross: number; totalTax: number; count: number; holdings: Set<string> }>();
-    for (const d of dividends) {
+    for (const d of filteredDividends) {
       const cats = holdingToCats.get(d.holding_id) || [{ name: "ללא תיקייה", color: null, id: "uncategorized" }];
       const grossILS = convertToILS(d.amount, d.currency || "ILS");
       const taxILS = convertToILS(d.tax_withheld || 0, d.currency || "ILS");
@@ -102,7 +154,7 @@ export function DividendSummary({ dividends, holdingCategories, view = "forecast
       }
     }
     return Array.from(catMap.values()).sort((a, b) => b.totalGross - a.totalGross);
-  }, [dividends, holdingCategories]);
+  }, [filteredDividends, holdingCategories]);
 
   // Available years
   const years = useMemo(() => {
@@ -193,14 +245,14 @@ export function DividendSummary({ dividends, holdingCategories, view = "forecast
     </Select>
   );
 
-  if (view === "forecast") {
+  if (view === "monthly") {
     return (
       <div className="space-y-6">
         {/* Monthly history by year */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
             <div>
-              <CardTitle>צפי דיבידנד</CardTitle>
+              <CardTitle>פירוט חודשי</CardTitle>
               <CardDescription>
                 נטו אחרי מס
                 {prevYearTotal > 0 && (
@@ -338,9 +390,37 @@ export function DividendSummary({ dividends, holdingCategories, view = "forecast
     );
   }
 
+  const rangeOptions = [
+    { value: "all", label: "הכל" },
+    { value: "thisMonth", label: "חודש נוכחי" },
+    { value: "lastMonth", label: "חודש קודם" },
+    { value: "last3Months", label: "3 חודשים" },
+    { value: "thisQuarter", label: "רבעון נוכחי" },
+    { value: "lastQuarter", label: "רבעון קודם" },
+    { value: "thisYear", label: `${new Date().getFullYear()}` },
+    { value: "lastYear", label: `${new Date().getFullYear() - 1}` },
+    { value: "last12Months", label: "12 חודשים" },
+  ];
+
   // view === "summary"
   return (
     <div className="space-y-6">
+      {/* Date range filter */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm text-muted-foreground">טווח:</span>
+        {rangeOptions.map((opt) => (
+          <Button
+            key={opt.value}
+            variant={summaryRange === opt.value ? "default" : "ghost"}
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setSummaryRange(opt.value)}
+          >
+            {opt.label}
+          </Button>
+        ))}
+      </div>
+
       {/* Summary tabs */}
       <Tabs defaultValue="byHolding" dir="rtl">
         <TabsList>
