@@ -191,7 +191,7 @@ export default function Dividends() {
         <Tabs defaultValue="history" dir="rtl">
           <TabsList>
             <TabsTrigger value="history">היסטוריה</TabsTrigger>
-            <TabsTrigger value="forecast">צפי דיבידנד</TabsTrigger>
+            <TabsTrigger value="monthly">פירוט חודשי</TabsTrigger>
             <TabsTrigger value="summary">סיכום</TabsTrigger>
           </TabsList>
 
@@ -214,9 +214,9 @@ export default function Dividends() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="forecast">
+          <TabsContent value="monthly">
             {isLoading ? <Skeleton className="h-40 w-full" /> : (
-              <DividendSummary dividends={dividends as any} holdingCategories={holdingCategories as any} view="forecast" />
+              <DividendSummary dividends={dividends as any} holdingCategories={holdingCategories as any} view="monthly" />
             )}
           </TabsContent>
 
