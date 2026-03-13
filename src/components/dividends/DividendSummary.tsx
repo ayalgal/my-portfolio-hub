@@ -47,7 +47,7 @@ const convertFromILS = (amountILS: number, toCurrency: DisplayCurrency) => {
 interface Props {
   dividends: DividendWithHolding[];
   holdingCategories: HoldingCategory[];
-  view?: "forecast" | "summary";
+  view?: "monthly" | "summary";
 }
 
 export function DividendSummary({ dividends, holdingCategories, view = "forecast" }: Props) {
