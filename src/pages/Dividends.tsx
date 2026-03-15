@@ -16,6 +16,7 @@ import { useExchangeRates } from "@/hooks/useExchangeRates";
 import { DividendFilters, type GroupBy } from "@/components/dividends/DividendFilters";
 import { DividendTable } from "@/components/dividends/DividendTable";
 import { DividendSummary } from "@/components/dividends/DividendSummary";
+import { DividendForecast } from "@/components/dividends/DividendForecast";
 
 type DisplayCurrency = "ILS" | "USD" | "CAD";
 const currSymbols: Record<DisplayCurrency, string> = { ILS: "₪", USD: "$", CAD: "C$" };
