@@ -192,6 +192,7 @@ export default function Dividends() {
         <Tabs defaultValue="received" dir="rtl">
           <TabsList>
             <TabsTrigger value="received">💰 התקבלו</TabsTrigger>
+            <TabsTrigger value="forecast">🔮 צפי</TabsTrigger>
             <TabsTrigger value="history">📋 פירוט עסקאות</TabsTrigger>
             <TabsTrigger value="summary">📊 סיכום</TabsTrigger>
           </TabsList>
