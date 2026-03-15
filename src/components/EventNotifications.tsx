@@ -81,34 +81,18 @@ export function EventNotifications() {
                       </p>
                     </div>
                   </button>
-                  <div className="flex flex-col gap-1 flex-shrink-0">
-                    {!event.is_read && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 opacity-60 hover:opacity-100 hover:bg-primary/10"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          markAsRead.mutate(event.id);
-                        }}
-                        title="סמן כנקרא"
-                      >
-                        <Check className="h-3 w-3 text-primary" />
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-60 hover:opacity-100 hover:bg-destructive/10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        dismissEvent.mutate(event.id);
-                      }}
-                      title="הסר התראה"
-                    >
-                      <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                    </Button>
-                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 flex-shrink-0 transition-opacity"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      dismissEvent.mutate(event.id);
+                    }}
+                    title="הסר התראה"
+                  >
+                    <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                  </Button>
                 </div>
               ))}
             </div>
