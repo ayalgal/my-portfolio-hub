@@ -188,17 +188,28 @@ export default function Dividends() {
           </Card>
         </div>
 
-        <Tabs defaultValue="monthly" dir="rtl">
+        <Tabs defaultValue="received" dir="rtl">
           <TabsList>
-            <TabsTrigger value="monthly">פירוט חודשי</TabsTrigger>
-            <TabsTrigger value="history">היסטוריית עסקאות</TabsTrigger>
-            <TabsTrigger value="summary">סיכום</TabsTrigger>
+            <TabsTrigger value="received">💰 התקבלו</TabsTrigger>
+            <TabsTrigger value="history">📋 פירוט עסקאות</TabsTrigger>
+            <TabsTrigger value="summary">📊 סיכום</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="monthly">
-            {isLoading ? <Skeleton className="h-40 w-full" /> : (
-              <DividendSummary dividends={dividends as any} holdingCategories={holdingCategories as any} view="monthly" />
-            )}
+          <TabsContent value="received">
+            <Card className="border-green-500/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                  דיבידנדים שהתקבלו
+                </CardTitle>
+                <CardDescription>פירוט חודשי של דיבידנדים ששולמו בפועל</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? <Skeleton className="h-40 w-full" /> : (
+                  <DividendSummary dividends={dividends as any} holdingCategories={holdingCategories as any} view="monthly" />
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           <TabsContent value="history">
@@ -206,7 +217,7 @@ export default function Dividends() {
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <CardTitle>היסטוריית עסקאות דיבידנד</CardTitle>
+                    <CardTitle>פירוט עסקאות דיבידנד</CardTitle>
                     <CardDescription>כל תשלומי הדיבידנד שהתקבלו בפועל</CardDescription>
                   </div>
                   <DividendFilters groupBy={groupBy} onGroupByChange={setGroupBy} taxRate={taxRate} onTaxRateChange={setTaxRate} />
