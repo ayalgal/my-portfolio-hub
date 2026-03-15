@@ -378,10 +378,127 @@ Deno.serve(async (req) => {
       }
     }
 
-    console.log(`Done: ${updated} updated, ${failed} failed, ${splitsDetected} splits, ${dividendsAdded} dividends, ${eventsCreated} events`);
+    // --- Generate portfolio insights ---
+    let insightsCreated = 0;
+    try {
+      // Get all holdings with prices for insight generation
+      const { data: allHoldings } = await supabase
+        .from('holdings')
+        .select('id, symbol, name, current_price, average_cost, quantity, currency, user_id')
+        .gt('quantity', 0);
+
+      // Group by user
+      const userHoldings = new Map<string, typeof allHoldings>();
+      for (const h of allHoldings || []) {
+        const arr = userHoldings.get(h.user_id) || [];
+        arr.push(h);
+        userHoldings.set(h.user_id, arr);
+      }
+
+      for (const [userId, uHoldings] of userHoldings) {
+        // Insight: Holdings with significant gains (>50%)
+        for (const h of uHoldings) {
+          if (!h.current_price || !h.average_cost || h.average_cost <= 0) continue;
+          const gainPct = ((h.current_price - h.average_cost) / h.average_cost) * 100;
+          
+          if (gainPct >= 50) {
+            const eventKey = `${h.id}_price_up_milestone`;
+            if (!existingEventSet.has(eventKey)) {
+              await supabase.from('stock_events').insert({
+                user_id: userId,
+                holding_id: h.id,
+                symbol: h.symbol,
+                event_type: 'insight',
+                title: `${h.symbol} עלתה ${gainPct.toFixed(0)}% מעלות הרכישה`,
+                description: `מחיר ממוצע: ${h.average_cost.toFixed(2)}, מחיר נוכחי: ${h.current_price.toFixed(2)}`,
+                event_date: new Date().toISOString().split('T')[0],
+              });
+              existingEventSet.add(eventKey);
+              insightsCreated++;
+            }
+          }
+
+          // Insight: Holdings with significant losses (>25%)
+          if (gainPct <= -25) {
+            const eventKey = `${h.id}_price_down_milestone`;
+            if (!existingEventSet.has(eventKey)) {
+              await supabase.from('stock_events').insert({
+                user_id: userId,
+                holding_id: h.id,
+                symbol: h.symbol,
+                event_type: 'insight',
+                title: `${h.symbol} ירדה ${Math.abs(gainPct).toFixed(0)}% מעלות הרכישה`,
+                description: `מחיר ממוצע: ${h.average_cost.toFixed(2)}, מחיר נוכחי: ${h.current_price.toFixed(2)}. שקול לבדוק את ההחזקה.`,
+                event_date: new Date().toISOString().split('T')[0],
+              });
+              existingEventSet.add(eventKey);
+              insightsCreated++;
+            }
+          }
+        }
+
+        // Insight: Dividend yield drop detection
+        const { data: userDivs } = await supabase
+          .from('dividends')
+          .select('holding_id, amount, shares_at_payment, payment_date')
+          .eq('user_id', userId)
+          .order('payment_date', { ascending: false })
+          .limit(200);
+
+        if (userDivs && userDivs.length > 0) {
+          // Group by holding, check if latest per-share div dropped vs average
+          const divsByHolding = new Map<string, typeof userDivs>();
+          for (const d of userDivs) {
+            const arr = divsByHolding.get(d.holding_id) || [];
+            arr.push(d);
+            divsByHolding.set(d.holding_id, arr);
+          }
+
+          for (const [holdingId, hDivs] of divsByHolding) {
+            if (hDivs.length < 2) continue;
+            const holding = uHoldings.find(h => h.id === holdingId);
+            if (!holding) continue;
+
+            // Compare latest dividend per share vs average of previous ones
+            const latest = hDivs[0];
+            const latestPerShare = latest.shares_at_payment && latest.shares_at_payment > 0 ? latest.amount / latest.shares_at_payment : null;
+            const previousPerShare = hDivs.slice(1, 5)
+              .filter(d => d.shares_at_payment && d.shares_at_payment > 0)
+              .map(d => d.amount / d.shares_at_payment!);
+
+            if (latestPerShare && previousPerShare.length > 0) {
+              const avgPrev = previousPerShare.reduce((s, v) => s + v, 0) / previousPerShare.length;
+              if (avgPrev > 0) {
+                const yieldChange = ((latestPerShare - avgPrev) / avgPrev) * 100;
+                if (yieldChange <= -20) {
+                  const eventKey = `${holdingId}_yield_drop_${latest.payment_date}`;
+                  if (!existingEventSet.has(eventKey)) {
+                    await supabase.from('stock_events').insert({
+                      user_id: userId,
+                      holding_id: holdingId,
+                      symbol: holding.symbol,
+                      event_type: 'insight',
+                      title: `תשואת דיבידנד ${holding.symbol} ירדה ${Math.abs(yieldChange).toFixed(0)}%`,
+                      description: `דיבידנד אחרון למניה: $${latestPerShare.toFixed(4)} לעומת ממוצע קודם $${avgPrev.toFixed(4)}`,
+                      event_date: latest.payment_date || new Date().toISOString().split('T')[0],
+                    });
+                    existingEventSet.add(eventKey);
+                    insightsCreated++;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (insightErr) {
+      console.error('Insights generation error:', insightErr);
+    }
+
+    console.log(`Done: ${updated} updated, ${failed} failed, ${splitsDetected} splits, ${dividendsAdded} dividends, ${eventsCreated} events, ${insightsCreated} insights`);
 
     return new Response(
-      JSON.stringify({ success: true, updated, failed, splitsDetected, dividendsAdded, eventsCreated, rates_updated: !!rates }),
+      JSON.stringify({ success: true, updated, failed, splitsDetected, dividendsAdded, eventsCreated, insightsCreated, rates_updated: !!rates }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

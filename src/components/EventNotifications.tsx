@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, SplitSquareVertical, TrendingUp, TrendingDown, AlertTriangle, DollarSign, CheckCheck, X } from "lucide-react";
+import { Bell, SplitSquareVertical, TrendingUp, TrendingDown, AlertTriangle, DollarSign, CheckCheck, X, Check, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -14,6 +14,10 @@ const eventIcons: Record<string, React.ReactNode> = {
   dividend_declared: <DollarSign className="h-4 w-4 text-green-500" />,
   dividend_cut: <TrendingDown className="h-4 w-4 text-red-500" />,
   dividend_increase: <TrendingUp className="h-4 w-4 text-green-600" />,
+  insight: <Lightbulb className="h-4 w-4 text-yellow-500" />,
+  yield_drop: <TrendingDown className="h-4 w-4 text-orange-500" />,
+  price_up: <TrendingUp className="h-4 w-4 text-green-500" />,
+  price_down: <TrendingDown className="h-4 w-4 text-red-500" />,
 };
 
 export function EventNotifications() {
@@ -50,7 +54,7 @@ export function EventNotifications() {
             </Button>
           )}
         </div>
-        <ScrollArea className="max-h-[400px]">
+        <ScrollArea className="h-[400px]">
           {events.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-8">אין התראות</p>
           ) : (
@@ -58,7 +62,7 @@ export function EventNotifications() {
               {events.map((event) => (
                 <div
                   key={event.id}
-                  className={`relative w-full text-right px-4 py-3 hover:bg-muted/50 transition-colors flex gap-3 items-start ${!event.is_read ? 'bg-primary/5' : ''}`}
+                  className={`relative w-full text-right px-4 py-3 hover:bg-muted/50 transition-colors flex gap-3 items-start group ${!event.is_read ? 'bg-primary/5' : ''}`}
                 >
                   <button
                     className="flex-1 flex gap-3 items-start text-right"
@@ -77,19 +81,34 @@ export function EventNotifications() {
                       </p>
                     </div>
                   </button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 flex-shrink-0 opacity-0 group-hover:opacity-100 hover:opacity-100 hover:bg-destructive/10"
-                    style={{ opacity: undefined }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      dismissEvent.mutate(event.id);
-                    }}
-                    title="הסר התראה"
-                  >
-                    <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
-                  </Button>
+                  <div className="flex flex-col gap-1 flex-shrink-0">
+                    {!event.is_read && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-60 hover:opacity-100 hover:bg-primary/10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          markAsRead.mutate(event.id);
+                        }}
+                        title="סמן כנקרא"
+                      >
+                        <Check className="h-3 w-3 text-primary" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-60 hover:opacity-100 hover:bg-destructive/10"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        dismissEvent.mutate(event.id);
+                      }}
+                      title="הסר התראה"
+                    >
+                      <X className="h-3 w-3 text-muted-foreground hover:text-destructive" />
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

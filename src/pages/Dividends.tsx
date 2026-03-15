@@ -188,20 +188,26 @@ export default function Dividends() {
           </Card>
         </div>
 
-        <Tabs defaultValue="history" dir="rtl">
+        <Tabs defaultValue="monthly" dir="rtl">
           <TabsList>
-            <TabsTrigger value="history">היסטוריה</TabsTrigger>
             <TabsTrigger value="monthly">פירוט חודשי</TabsTrigger>
+            <TabsTrigger value="history">היסטוריית עסקאות</TabsTrigger>
             <TabsTrigger value="summary">סיכום</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="monthly">
+            {isLoading ? <Skeleton className="h-40 w-full" /> : (
+              <DividendSummary dividends={dividends as any} holdingCategories={holdingCategories as any} view="monthly" />
+            )}
+          </TabsContent>
 
           <TabsContent value="history">
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <CardTitle>היסטוריית דיבידנדים</CardTitle>
-                    <CardDescription>כל הדיבידנדים שהתקבלו</CardDescription>
+                    <CardTitle>היסטוריית עסקאות דיבידנד</CardTitle>
+                    <CardDescription>כל תשלומי הדיבידנד שהתקבלו בפועל</CardDescription>
                   </div>
                   <DividendFilters groupBy={groupBy} onGroupByChange={setGroupBy} taxRate={taxRate} onTaxRateChange={setTaxRate} />
                 </div>
@@ -212,12 +218,6 @@ export default function Dividends() {
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
-
-          <TabsContent value="monthly">
-            {isLoading ? <Skeleton className="h-40 w-full" /> : (
-              <DividendSummary dividends={dividends as any} holdingCategories={holdingCategories as any} view="monthly" />
-            )}
           </TabsContent>
 
           <TabsContent value="summary">
