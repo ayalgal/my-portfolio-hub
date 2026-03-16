@@ -487,6 +487,43 @@ export default function Dashboard() {
           </Card>
         )}
 
+        {/* Portfolio Value Chart */}
+        {portfolioValueData.length > 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>שווי התיק לאורך זמן</CardTitle>
+              <CardDescription>שווי שוק מול עלות — מבוסס על תמונות מצב יומיות</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={portfolioValueData}>
+                    <defs>
+                      <linearGradient id="valueGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={Math.max(0, Math.floor(portfolioValueData.length / 8))} />
+                    <YAxis tickFormatter={(v) => `${currencySymbols[displayCurrency]}${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [
+                        `${currencySymbols[displayCurrency]}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+                        name === 'value' ? 'שווי שוק' : 'עלות'
+                      ]}
+                      contentStyle={{ direction: 'rtl' }}
+                    />
+                    <Legend formatter={(value) => value === 'value' ? 'שווי שוק' : 'עלות'} />
+                    <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="url(#valueGradient)" strokeWidth={2} name="value" />
+                    <Line type="monotone" dataKey="cost" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} strokeDasharray="5 5" dot={false} name="cost" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Performance & Dividends Charts */}
         {holdings.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
