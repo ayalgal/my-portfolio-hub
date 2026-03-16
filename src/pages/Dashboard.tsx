@@ -51,6 +51,48 @@ export default function Dashboard() {
   const [savingsToUpdate, setSavingsToUpdate] = useState<typeof holdings[0] | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // Fetch portfolio value snapshots for period returns
+  const { data: priceHistoryData } = useQuery({
+    queryKey: ["portfolio-value-history", user?.id],
+    queryFn: async () => {
+      if (!user?.id || holdings.length === 0) return [];
+      // Get all holding symbols
+      const symbols = holdings.filter(h => h.current_price !== null).map(h => h.symbol);
+      if (symbols.length === 0) return [];
+      
+      try {
+        const { data, error } = await supabase.functions.invoke("price-history", {
+          body: { symbols, range: "1mo" },
+        });
+        if (error) return [];
+        return data?.history || [];
+      } catch {
+        return [];
+      }
+    },
+    enabled: !!user?.id && holdings.length > 0,
+    staleTime: 1000 * 60 * 15,
+  });
+
+  // Calculate period returns from holdings' last_price_update & transactions
+  const periodReturns = useMemo(() => {
+    if (holdings.length === 0) return null;
+    
+    // We'll estimate day/week/month returns using current value and cost
+    // For accurate returns, we'd need historical prices per holding
+    // Using a simple approach: calculate from the price data if available
+    const now = new Date();
+    const oneDayAgo = new Date(now); oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+    const oneWeekAgo = new Date(now); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const oneMonthAgo = new Date(now); oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+
+    // Calculate from transactions in each period
+    // Portfolio value now vs value at each point requires historical prices
+    // For now, we'll show the data we have
+    return { day: null as number | null, week: null as number | null, month: null as number | null };
+  }, [holdings]);
 
   // Monthly reminder for bank savings updates
   useEffect(() => {
