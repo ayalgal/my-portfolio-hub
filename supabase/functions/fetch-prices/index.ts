@@ -495,6 +495,56 @@ Deno.serve(async (req) => {
       console.error('Insights generation error:', insightErr);
     }
 
+    // --- Save portfolio snapshots ---
+    try {
+      // Get fresh holdings data after price updates
+      const { data: freshHoldings } = await supabase
+        .from('holdings')
+        .select('user_id, quantity, average_cost, current_price, currency')
+        .gt('quantity', 0);
+
+      if (freshHoldings && freshHoldings.length > 0) {
+        // Get exchange rates for conversion
+        const { data: exRates } = await supabase
+          .from('exchange_rates')
+          .select('from_currency, rate');
+        
+        const rateMap: Record<string, number> = {};
+        for (const r of exRates || []) {
+          rateMap[r.from_currency] = r.rate;
+        }
+        const toILS = (amount: number, currency: string) => {
+          if (currency === 'ILS') return amount;
+          return amount * (rateMap[currency] || 3.7);
+        };
+
+        // Group by user
+        const userTotals = new Map<string, { value: number; cost: number }>();
+        for (const h of freshHoldings) {
+          const prev = userTotals.get(h.user_id) || { value: 0, cost: 0 };
+          const price = h.current_price ?? h.average_cost;
+          prev.value += toILS(h.quantity * price, h.currency || 'ILS');
+          prev.cost += toILS(h.quantity * h.average_cost, h.currency || 'ILS');
+          userTotals.set(h.user_id, prev);
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        for (const [userId, totals] of userTotals) {
+          await supabase
+            .from('portfolio_snapshots')
+            .upsert({
+              user_id: userId,
+              snapshot_date: today,
+              total_value_ils: Math.round(totals.value),
+              total_cost_ils: Math.round(totals.cost),
+            }, { onConflict: 'user_id,snapshot_date' });
+        }
+        console.log(`Saved portfolio snapshots for ${userTotals.size} users`);
+      }
+    } catch (snapErr) {
+      console.error('Snapshot error:', snapErr);
+    }
+
     console.log(`Done: ${updated} updated, ${failed} failed, ${splitsDetected} splits, ${dividendsAdded} dividends, ${eventsCreated} events, ${insightsCreated} insights`);
 
     return new Response(
