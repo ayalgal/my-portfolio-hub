@@ -355,6 +355,35 @@ export default function Dashboard() {
                   <p className={`text-xs ${totalGainPercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%
                   </p>
+                  {/* Period returns */}
+                  {periodReturns && (periodReturns.day !== null || periodReturns.week !== null || periodReturns.month !== null) && (
+                    <div className="mt-2 pt-2 border-t border-border space-y-0.5">
+                      {periodReturns.day !== null && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">יום:</span>
+                          <span className={periodReturns.day >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            {periodReturns.day >= 0 ? '+' : ''}{formatAmount(periodReturns.dayAmount || 0)} ({periodReturns.day.toFixed(2)}%)
+                          </span>
+                        </div>
+                      )}
+                      {periodReturns.week !== null && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">שבוע:</span>
+                          <span className={periodReturns.week >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            {periodReturns.week >= 0 ? '+' : ''}{formatAmount(periodReturns.weekAmount || 0)} ({periodReturns.week.toFixed(2)}%)
+                          </span>
+                        </div>
+                      )}
+                      {periodReturns.month !== null && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">חודש:</span>
+                          <span className={periodReturns.month >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            {periodReturns.month >= 0 ? '+' : ''}{formatAmount(periodReturns.monthAmount || 0)} ({periodReturns.month.toFixed(2)}%)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {totalDividendsILS > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">
                       כולל דיבידנדים: <span className={(totalGainILS + totalDividendsILS) >= 0 ? 'text-green-500' : 'text-red-500'}>
