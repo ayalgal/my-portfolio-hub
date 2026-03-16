@@ -258,6 +258,33 @@ export type Database = {
         }
         Relationships: []
       }
+      portfolio_snapshots: {
+        Row: {
+          created_at: string | null
+          id: string
+          snapshot_date: string
+          total_cost_ils: number
+          total_value_ils: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          snapshot_date?: string
+          total_cost_ils?: number
+          total_value_ils?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          snapshot_date?: string
+          total_cost_ils?: number
+          total_value_ils?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       portfolios: {
         Row: {
           created_at: string | null

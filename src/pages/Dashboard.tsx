@@ -17,11 +17,13 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { useSP500Data, calcSP500Comparison } from "@/hooks/useSP500Data";
 import { useToast } from "@/hooks/use-toast";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, BarChart, Bar } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, LineChart, Line, XAxis, YAxis, CartesianGrid, Legend, BarChart, Bar, AreaChart, Area } from "recharts";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { AddHoldingDialog } from "@/components/AddHoldingDialog";
 import { UpdateSavingsDialog } from "@/components/UpdateSavingsDialog";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 
 type DisplayCurrency = 'ILS' | 'USD' | 'CAD';
 
@@ -49,6 +51,72 @@ export default function Dashboard() {
   const [savingsToUpdate, setSavingsToUpdate] = useState<typeof holdings[0] | null>(null);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // Fetch portfolio snapshots for period returns & value chart
+  const { data: snapshots } = useQuery({
+    queryKey: ["portfolio-snapshots", user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("portfolio_snapshots")
+        .select("snapshot_date, total_value_ils, total_cost_ils")
+        .eq("user_id", user.id)
+        .order("snapshot_date", { ascending: true });
+      if (error) return [];
+      return data || [];
+    },
+    enabled: !!user?.id,
+    staleTime: 1000 * 60 * 5,
+  });
+
+  // Calculate period returns from snapshots
+  const periodReturns = useMemo(() => {
+    if (!snapshots || snapshots.length < 2) return null;
+    const latest = snapshots[snapshots.length - 1];
+    const latestValue = latest.total_value_ils;
+
+    const findSnapshotDaysAgo = (days: number) => {
+      const target = new Date();
+      target.setDate(target.getDate() - days);
+      const targetStr = target.toISOString().split("T")[0];
+      // Find closest snapshot on or before target date
+      let closest = snapshots[0];
+      for (const s of snapshots) {
+        if (s.snapshot_date <= targetStr) closest = s;
+      }
+      return closest.snapshot_date !== latest.snapshot_date ? closest : null;
+    };
+
+    const calcReturn = (prev: typeof snapshots[0] | null) => {
+      if (!prev || prev.total_value_ils === 0) return null;
+      return ((latestValue - prev.total_value_ils) / prev.total_value_ils) * 100;
+    };
+
+    return {
+      day: calcReturn(findSnapshotDaysAgo(1)),
+      week: calcReturn(findSnapshotDaysAgo(7)),
+      month: calcReturn(findSnapshotDaysAgo(30)),
+      dayAmount: findSnapshotDaysAgo(1) ? latestValue - findSnapshotDaysAgo(1)!.total_value_ils : null,
+      weekAmount: findSnapshotDaysAgo(7) ? latestValue - findSnapshotDaysAgo(7)!.total_value_ils : null,
+      monthAmount: findSnapshotDaysAgo(30) ? latestValue - findSnapshotDaysAgo(30)!.total_value_ils : null,
+    };
+  }, [snapshots]);
+
+  // Portfolio value chart data from snapshots
+  const portfolioValueData = useMemo(() => {
+    if (!snapshots || snapshots.length === 0) return [];
+    const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
+    return snapshots.map(s => {
+      const d = new Date(s.snapshot_date);
+      return {
+        date: s.snapshot_date,
+        label: `${d.getDate()} ${monthNames[d.getMonth()]}`,
+        value: convertFromILS(s.total_value_ils, displayCurrency),
+        cost: convertFromILS(s.total_cost_ils, displayCurrency),
+      };
+    });
+  }, [snapshots, convertFromILS, displayCurrency]);
 
   // Monthly reminder for bank savings updates
   useEffect(() => {
@@ -287,6 +355,35 @@ export default function Dashboard() {
                   <p className={`text-xs ${totalGainPercent >= 0 ? 'text-green-500' : 'text-red-500'}`}>
                     {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%
                   </p>
+                  {/* Period returns */}
+                  {periodReturns && (periodReturns.day !== null || periodReturns.week !== null || periodReturns.month !== null) && (
+                    <div className="mt-2 pt-2 border-t border-border space-y-0.5">
+                      {periodReturns.day !== null && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">יום:</span>
+                          <span className={periodReturns.day >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            {periodReturns.day >= 0 ? '+' : ''}{formatAmount(periodReturns.dayAmount || 0)} ({periodReturns.day.toFixed(2)}%)
+                          </span>
+                        </div>
+                      )}
+                      {periodReturns.week !== null && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">שבוע:</span>
+                          <span className={periodReturns.week >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            {periodReturns.week >= 0 ? '+' : ''}{formatAmount(periodReturns.weekAmount || 0)} ({periodReturns.week.toFixed(2)}%)
+                          </span>
+                        </div>
+                      )}
+                      {periodReturns.month !== null && (
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">חודש:</span>
+                          <span className={periodReturns.month >= 0 ? 'text-green-500' : 'text-red-500'}>
+                            {periodReturns.month >= 0 ? '+' : ''}{formatAmount(periodReturns.monthAmount || 0)} ({periodReturns.month.toFixed(2)}%)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {totalDividendsILS > 0 && (
                     <p className="text-xs text-muted-foreground mt-1">
                       כולל דיבידנדים: <span className={(totalGainILS + totalDividendsILS) >= 0 ? 'text-green-500' : 'text-red-500'}>
@@ -385,6 +482,43 @@ export default function Dashboard() {
                     </div>
                   ))}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Portfolio Value Chart */}
+        {portfolioValueData.length > 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>שווי התיק לאורך זמן</CardTitle>
+              <CardDescription>שווי שוק מול עלות — מבוסס על תמונות מצב יומיות</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={portfolioValueData}>
+                    <defs>
+                      <linearGradient id="valueGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={Math.max(0, Math.floor(portfolioValueData.length / 8))} />
+                    <YAxis tickFormatter={(v) => `${currencySymbols[displayCurrency]}${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [
+                        `${currencySymbols[displayCurrency]}${value.toLocaleString(undefined, { maximumFractionDigits: 0 })}`,
+                        name === 'value' ? 'שווי שוק' : 'עלות'
+                      ]}
+                      contentStyle={{ direction: 'rtl' }}
+                    />
+                    <Legend formatter={(value) => value === 'value' ? 'שווי שוק' : 'עלות'} />
+                    <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fill="url(#valueGradient)" strokeWidth={2} name="value" />
+                    <Line type="monotone" dataKey="cost" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} strokeDasharray="5 5" dot={false} name="cost" />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
