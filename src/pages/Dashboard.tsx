@@ -53,46 +53,70 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  // Fetch portfolio value snapshots for period returns
-  const { data: priceHistoryData } = useQuery({
-    queryKey: ["portfolio-value-history", user?.id],
+  // Fetch portfolio snapshots for period returns & value chart
+  const { data: snapshots } = useQuery({
+    queryKey: ["portfolio-snapshots", user?.id],
     queryFn: async () => {
-      if (!user?.id || holdings.length === 0) return [];
-      // Get all holding symbols
-      const symbols = holdings.filter(h => h.current_price !== null).map(h => h.symbol);
-      if (symbols.length === 0) return [];
-      
-      try {
-        const { data, error } = await supabase.functions.invoke("price-history", {
-          body: { symbols, range: "1mo" },
-        });
-        if (error) return [];
-        return data?.history || [];
-      } catch {
-        return [];
-      }
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from("portfolio_snapshots")
+        .select("snapshot_date, total_value_ils, total_cost_ils")
+        .eq("user_id", user.id)
+        .order("snapshot_date", { ascending: true });
+      if (error) return [];
+      return data || [];
     },
-    enabled: !!user?.id && holdings.length > 0,
-    staleTime: 1000 * 60 * 15,
+    enabled: !!user?.id,
+    staleTime: 1000 * 60 * 5,
   });
 
-  // Calculate period returns from holdings' last_price_update & transactions
+  // Calculate period returns from snapshots
   const periodReturns = useMemo(() => {
-    if (holdings.length === 0) return null;
-    
-    // We'll estimate day/week/month returns using current value and cost
-    // For accurate returns, we'd need historical prices per holding
-    // Using a simple approach: calculate from the price data if available
-    const now = new Date();
-    const oneDayAgo = new Date(now); oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-    const oneWeekAgo = new Date(now); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const oneMonthAgo = new Date(now); oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    if (!snapshots || snapshots.length < 2) return null;
+    const latest = snapshots[snapshots.length - 1];
+    const latestValue = latest.total_value_ils;
 
-    // Calculate from transactions in each period
-    // Portfolio value now vs value at each point requires historical prices
-    // For now, we'll show the data we have
-    return { day: null as number | null, week: null as number | null, month: null as number | null };
-  }, [holdings]);
+    const findSnapshotDaysAgo = (days: number) => {
+      const target = new Date();
+      target.setDate(target.getDate() - days);
+      const targetStr = target.toISOString().split("T")[0];
+      // Find closest snapshot on or before target date
+      let closest = snapshots[0];
+      for (const s of snapshots) {
+        if (s.snapshot_date <= targetStr) closest = s;
+      }
+      return closest.snapshot_date !== latest.snapshot_date ? closest : null;
+    };
+
+    const calcReturn = (prev: typeof snapshots[0] | null) => {
+      if (!prev || prev.total_value_ils === 0) return null;
+      return ((latestValue - prev.total_value_ils) / prev.total_value_ils) * 100;
+    };
+
+    return {
+      day: calcReturn(findSnapshotDaysAgo(1)),
+      week: calcReturn(findSnapshotDaysAgo(7)),
+      month: calcReturn(findSnapshotDaysAgo(30)),
+      dayAmount: findSnapshotDaysAgo(1) ? latestValue - findSnapshotDaysAgo(1)!.total_value_ils : null,
+      weekAmount: findSnapshotDaysAgo(7) ? latestValue - findSnapshotDaysAgo(7)!.total_value_ils : null,
+      monthAmount: findSnapshotDaysAgo(30) ? latestValue - findSnapshotDaysAgo(30)!.total_value_ils : null,
+    };
+  }, [snapshots]);
+
+  // Portfolio value chart data from snapshots
+  const portfolioValueData = useMemo(() => {
+    if (!snapshots || snapshots.length === 0) return [];
+    const monthNames = ["ינו", "פבר", "מרץ", "אפר", "מאי", "יוני", "יולי", "אוג", "ספט", "אוק", "נוב", "דצמ"];
+    return snapshots.map(s => {
+      const d = new Date(s.snapshot_date);
+      return {
+        date: s.snapshot_date,
+        label: `${d.getDate()} ${monthNames[d.getMonth()]}`,
+        value: convertFromILS(s.total_value_ils, displayCurrency),
+        cost: convertFromILS(s.total_cost_ils, displayCurrency),
+      };
+    });
+  }, [snapshots, convertFromILS, displayCurrency]);
 
   // Monthly reminder for bank savings updates
   useEffect(() => {
