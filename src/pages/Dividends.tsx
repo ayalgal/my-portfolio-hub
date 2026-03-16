@@ -215,9 +215,7 @@ export default function Dividends() {
           </TabsContent>
 
           <TabsContent value="forecast">
-            {isLoading ? <Skeleton className="h-40 w-full" /> : (
-              <DividendForecast dividends={dividends as any} holdings={holdings} />
-            )}
+            <DividendForecast />
           </TabsContent>
 
           <TabsContent value="history">
