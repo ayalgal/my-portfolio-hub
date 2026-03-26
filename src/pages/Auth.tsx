@@ -103,26 +103,27 @@ export default function Auth() {
               className="w-full"
               onClick={async () => {
                 const callbackUrl = `${window.location.origin}/auth/callback`;
-                const oauthUrl = new URL("https://oauth.lovable.app/~oauth/initiate");
-                oauthUrl.searchParams.set("provider", "google");
-                oauthUrl.searchParams.set("redirect_uri", callbackUrl);
-
-                // Use direct redirect to Lovable OAuth broker so we don't depend on local /~oauth route.
-                window.location.href = oauthUrl.toString();
-
-                // If for some reason the above fallback isn't valid (iframe etc), try library API.
-                /*
-                const { error } = await lovable.auth.signInWithOAuth("google", {
+                const { redirected, error } = await lovable.auth.signInWithOAuth("google", {
                   redirect_uri: callbackUrl,
                 });
+
                 if (error) {
                   toast({
                     variant: "destructive",
                     title: "שגיאה בהתחברות עם Google",
                     description: error.message,
                   });
+                  return;
                 }
-                */
+
+                if (!redirected) {
+                  // הסבנו תקלת legacy / פרוקסי
+                  toast({
+                    variant: "destructive",
+                    title: "שגיאת אוטנטיקציה",
+                    description: "לא נפתח חלון באימות OAuth. בדוק הגדרות רשת וכתובת redirect_uri.",
+                  });
+                }
               }}
             >
               <svg className="w-5 h-5 ml-2" viewBox="0 0 24 24">

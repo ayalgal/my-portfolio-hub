@@ -2,9 +2,9 @@
 
 import { createLovableAuth } from "@lovable.dev/cloud-auth-js";
 import { supabase } from "../supabase/client";
-const LOVABLE_OAUTH_BROKER_URL = import.meta.env.VITE_LOVABLE_OAUTH_BROKER_URL ?? "https://oauth.lovable.app/~oauth/initiate";
+const LOVABLE_OAUTH_BROKER_URL = import.meta.env.VITE_LOVABLE_OAUTH_BROKER_URL ?? "/~oauth/initiate";
 
-const LOVABLE_SUPPORTED_ORIGINS = ["https://oauth.lovable.app"];
+const LOVABLE_SUPPORTED_ORIGINS = ["https://oauth.lovable.app", "http://127.0.0.1:8081", "http://localhost:8081"];
 
 const lovableAuth = createLovableAuth({
   oauthBrokerUrl: LOVABLE_OAUTH_BROKER_URL,
