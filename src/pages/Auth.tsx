@@ -102,8 +102,9 @@ export default function Auth() {
               variant="outline"
               className="w-full"
               onClick={async () => {
+                const callbackUrl = `${window.location.origin}/auth/callback`;
                 const { error } = await lovable.auth.signInWithOAuth("google", {
-                  redirect_uri: window.location.origin,
+                  redirect_uri: callbackUrl,
                 });
                 if (error) {
                   toast({

@@ -18,6 +18,7 @@ import Import from "./pages/Import";
 import Export from "./pages/Export";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import OAuthCallback from "./pages/OAuthCallback";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,10 +48,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 const AppRoutes = () => {
   const { user } = useAuth();
-  
+
   return (
     <Routes>
       <Route path="/auth" element={user ? <Navigate to="/dashboard" replace /> : <Auth />} />
+      <Route path="/auth/callback" element={<OAuthCallback />} />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/invest" element={<ProtectedRoute><Invest /></ProtectedRoute>} />
@@ -59,7 +61,6 @@ const AppRoutes = () => {
       <Route path="/allocations" element={<ProtectedRoute><Allocations /></ProtectedRoute>} />
       <Route path="/category/:id" element={<ProtectedRoute><CategoryDetail /></ProtectedRoute>} />
       <Route path="/dividends" element={<ProtectedRoute><Dividends /></ProtectedRoute>} />
-      
       <Route path="/activity" element={<ProtectedRoute><Activity /></ProtectedRoute>} />
       <Route path="/import" element={<ProtectedRoute><Import /></ProtectedRoute>} />
       <Route path="/export" element={<ProtectedRoute><Export /></ProtectedRoute>} />
