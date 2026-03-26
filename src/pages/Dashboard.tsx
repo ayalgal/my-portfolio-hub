@@ -46,6 +46,8 @@ export default function Dashboard() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [showSP500, setShowSP500] = useState(true);
+  type TimeRange = '1m' | '3m' | '1y' | '5y' | 'all';
+  const [selectedTimeRange, setSelectedTimeRange] = useState<TimeRange>('1y');
   const [selectedDivYear, setSelectedDivYear] = useState<number>(new Date().getFullYear());
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [savingsToUpdate, setSavingsToUpdate] = useState<typeof holdings[0] | null>(null);
@@ -117,6 +119,31 @@ export default function Dashboard() {
       };
     });
   }, [snapshots, convertFromILS, displayCurrency]);
+
+  const filteredPortfolioValueData = useMemo(() => {
+    if (!portfolioValueData || portfolioValueData.length === 0) return [];
+
+    if (selectedTimeRange === 'all') return portfolioValueData;
+
+    const now = new Date();
+    const days = selectedTimeRange === '1m' ? 30
+      : selectedTimeRange === '3m' ? 90
+      : selectedTimeRange === '1y' ? 365
+      : selectedTimeRange === '5y' ? 365 * 5
+      : 365;
+
+    const threshold = new Date(now);
+    threshold.setDate(now.getDate() - days);
+
+    const filtered = portfolioValueData.filter((item) => new Date(item.date) >= threshold);
+
+    if (filtered.length === 0) {
+      // Fallback: show last available snapshot
+      return [portfolioValueData[portfolioValueData.length - 1]];
+    }
+
+    return filtered;
+  }, [portfolioValueData, selectedTimeRange]);
 
   // Monthly reminder for bank savings updates
   useEffect(() => {
@@ -488,16 +515,27 @@ export default function Dashboard() {
         )}
 
         {/* Portfolio Value Chart */}
-        {portfolioValueData.length > 1 && (
+        {filteredPortfolioValueData.length > 0 && (
           <Card>
-            <CardHeader>
-              <CardTitle>שווי התיק לאורך זמן</CardTitle>
-              <CardDescription>שווי שוק מול עלות — מבוסס על תמונות מצב יומיות</CardDescription>
+            <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <div>
+                <CardTitle>שווי התיק לאורך זמן</CardTitle>
+                <CardDescription>שווי שוק מול עלות — מבוסס על תמונות מצב יומיות</CardDescription>
+              </div>
+              <Tabs value={selectedTimeRange} onValueChange={(v) => setSelectedTimeRange(v as TimeRange)}>
+                <TabsList className="grid grid-cols-5 gap-1 !p-1">
+                  <TabsTrigger value="1m" className="text-xs h-7">1 חודש</TabsTrigger>
+                  <TabsTrigger value="3m" className="text-xs h-7">רבעון</TabsTrigger>
+                  <TabsTrigger value="1y" className="text-xs h-7">1 שנה</TabsTrigger>
+                  <TabsTrigger value="5y" className="text-xs h-7">5 שנים</TabsTrigger>
+                  <TabsTrigger value="all" className="text-xs h-7">חיי התיק</TabsTrigger>
+                </TabsList>
+              </Tabs>
             </CardHeader>
             <CardContent>
               <div className="h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={portfolioValueData}>
+                  <AreaChart data={filteredPortfolioValueData}>
                     <defs>
                       <linearGradient id="valueGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />

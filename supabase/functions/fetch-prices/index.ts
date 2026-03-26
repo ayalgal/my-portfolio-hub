@@ -199,6 +199,14 @@ Deno.serve(async (req) => {
     const existingEventSet = new Set(
       (existingEvents || []).map(e => `${e.holding_id}_${e.event_type}_${e.event_date}`)
     );
+    const existingEventTypeSet = new Set(
+      (existingEvents || []).map(e => `${e.holding_id}_${e.event_type}`)
+    );
+
+    // Get recent dividend dates to avoid price-milestone noise around payouts
+    const { data: recentDividends } = await supabase
+      .from('dividends')
+      .select('holding_id, ex_date, payment_date');
 
     for (const holding of holdings || []) {
       if (holding.asset_type === 'israeli_fund') continue;
@@ -396,43 +404,56 @@ Deno.serve(async (req) => {
       }
 
       for (const [userId, uHoldings] of userHoldings) {
-        // Insight: Holdings with significant gains (>50%)
+        // Insight: Holdings with significant gains (>50%) / losses (>25%)
         for (const h of uHoldings) {
           if (!h.current_price || !h.average_cost || h.average_cost <= 0) continue;
           const gainPct = ((h.current_price - h.average_cost) / h.average_cost) * 100;
-          
-          if (gainPct >= 50) {
-            const eventKey = `${h.id}_price_up_milestone`;
-            if (!existingEventSet.has(eventKey)) {
-              await supabase.from('stock_events').insert({
-                user_id: userId,
-                holding_id: h.id,
-                symbol: h.symbol,
-                event_type: 'insight',
-                title: `${h.symbol} עלתה ${gainPct.toFixed(0)}% מעלות הרכישה`,
-                description: `מחיר ממוצע: ${h.average_cost.toFixed(2)}, מחיר נוכחי: ${h.current_price.toFixed(2)}`,
-                event_date: new Date().toISOString().split('T')[0],
-              });
-              existingEventSet.add(eventKey);
-              insightsCreated++;
-            }
-          }
 
-          // Insight: Holdings with significant losses (>25%)
-          if (gainPct <= -25) {
-            const eventKey = `${h.id}_price_down_milestone`;
-            if (!existingEventSet.has(eventKey)) {
-              await supabase.from('stock_events').insert({
-                user_id: userId,
-                holding_id: h.id,
-                symbol: h.symbol,
-                event_type: 'insight',
-                title: `${h.symbol} ירדה ${Math.abs(gainPct).toFixed(0)}% מעלות הרכישה`,
-                description: `מחיר ממוצע: ${h.average_cost.toFixed(2)}, מחיר נוכחי: ${h.current_price.toFixed(2)}. שקול לבדוק את ההחזקה.`,
-                event_date: new Date().toISOString().split('T')[0],
-              });
-              existingEventSet.add(eventKey);
-              insightsCreated++;
+          const holdingDividends = (recentDividends || []).filter(d => d.holding_id === h.id);
+          const hasRecentDividend = holdingDividends.some((d) => {
+            const dateStr = d.ex_date || d.payment_date;
+            if (!dateStr) return false;
+            const dt = new Date(dateStr);
+            if (Number.isNaN(dt.valueOf())) return false;
+            const ageDays = Math.abs((new Date().valueOf() - dt.valueOf()) / (1000 * 60 * 60 * 24));
+            return ageDays <= 14;
+          });
+
+          if (!hasRecentDividend) {
+            if (gainPct >= 50) {
+              const eventType = 'price_up';
+              const eventKey = `${h.id}_${eventType}`;
+              if (!existingEventTypeSet.has(eventKey)) {
+                await supabase.from('stock_events').insert({
+                  user_id: userId,
+                  holding_id: h.id,
+                  symbol: h.symbol,
+                  event_type,
+                  title: `${h.symbol} עלתה ${gainPct.toFixed(0)}% מעלות הרכישה`,
+                  description: `מחיר ממוצע: ${h.average_cost.toFixed(2)}, מחיר נוכחי: ${h.current_price.toFixed(2)}`,
+                  event_date: new Date().toISOString().split('T')[0],
+                });
+                existingEventTypeSet.add(eventKey);
+                insightsCreated++;
+              }
+            }
+
+            if (gainPct <= -25) {
+              const eventType = 'price_down';
+              const eventKey = `${h.id}_${eventType}`;
+              if (!existingEventTypeSet.has(eventKey)) {
+                await supabase.from('stock_events').insert({
+                  user_id: userId,
+                  holding_id: h.id,
+                  symbol: h.symbol,
+                  event_type,
+                  title: `${h.symbol} ירדה ${Math.abs(gainPct).toFixed(0)}% מעלות הרכישה`,
+                  description: `מחיר ממוצע: ${h.average_cost.toFixed(2)}, מחיר נוכחי: ${h.current_price.toFixed(2)}. שקול לבדוק את ההחזקה.`,
+                  event_date: new Date().toISOString().split('T')[0],
+                });
+                existingEventTypeSet.add(eventKey);
+                insightsCreated++;
+              }
             }
           }
         }
@@ -471,13 +492,14 @@ Deno.serve(async (req) => {
               if (avgPrev > 0) {
                 const yieldChange = ((latestPerShare - avgPrev) / avgPrev) * 100;
                 if (yieldChange <= -20) {
-                  const eventKey = `${holdingId}_yield_drop_${latest.payment_date}`;
+                  const eventType = 'yield_drop';
+                  const eventKey = `${holdingId}_${eventType}_${latest.payment_date}`;
                   if (!existingEventSet.has(eventKey)) {
                     await supabase.from('stock_events').insert({
                       user_id: userId,
                       holding_id: holdingId,
                       symbol: holding.symbol,
-                      event_type: 'insight',
+                      event_type,
                       title: `תשואת דיבידנד ${holding.symbol} ירדה ${Math.abs(yieldChange).toFixed(0)}%`,
                       description: `דיבידנד אחרון למניה: $${latestPerShare.toFixed(4)} לעומת ממוצע קודם $${avgPrev.toFixed(4)}`,
                       event_date: latest.payment_date || new Date().toISOString().split('T')[0],
