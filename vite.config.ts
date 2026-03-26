@@ -8,6 +8,14 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      "/~oauth": {
+        target: "https://oauth.lovable.app",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/~oauth/, "/~oauth"),
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
